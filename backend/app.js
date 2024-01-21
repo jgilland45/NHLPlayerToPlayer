@@ -1,3 +1,4 @@
+// To enable Vue CLI: https://stackoverflow.com/questions/4037939/powershell-says-execution-of-scripts-is-disabled-on-this-system
 const Express = require("express")();
 const Http = require("http").Server(Express);
 const Socketio = require("socket.io")(Http);
