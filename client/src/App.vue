@@ -1,9 +1,11 @@
 <template>
-  <BlockGame msg="Welcome to Your Vue.js App"/>
+  <nav>
+    <router-link to="/">Home</router-link>
+  </nav>
+  <router-view/>
 </template>
 
 <script setup>
-import BlockGame from './components/BlockGame.vue'
 
 </script>
 

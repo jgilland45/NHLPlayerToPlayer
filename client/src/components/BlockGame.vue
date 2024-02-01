@@ -19,7 +19,7 @@
 import { ref, onMounted } from 'vue'
 import { io } from 'socket.io-client'
 
-const socket = ref(io('http://localhost:3000'))
+const socket = ref(io('http://localhost:3001'))
 const context = ref()
 const game = ref()
 const position = ref({
