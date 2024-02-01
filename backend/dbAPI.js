@@ -5,12 +5,14 @@ const bodyParser = require("body-parser");
 const app = express();
 const sqlite = require("sqlite3").verbose();
 const url = require("url");
+const cors = require("cors");
 
 let sql;
 const db = new sqlite.Database("nhlPlayers.db", sqlite.OPEN_READWRITE, (err) => {
   if (err) return console.error(err);
 });
 
+app.use(cors());
 app.use(bodyParser.json());
 
 // // post request
@@ -36,6 +38,61 @@ app.use(bodyParser.json());
 // });
 
 // get requests
+// get all player names urls
+app.get("/players", (req, res) => {
+  sql = "SELECT * FROM PLAYERS";
+  try {
+    // const queryObject = url.parse(req.url, true).query; // query parameters
+    // if (queryObject.field && queryObject.type) sql += ` WHERE ${queryObject.field} LIKE '%${queryObject.type}%'`
+    db.all(sql, [], (err, rows) => {
+      if (err) return res.json({ status: 300, success: false, error: err });
+
+      if (rows.length < 1) return res.json({ status: 300, success: false, error: "No match" });
+      console.log('returned all players!');
+      return res.json({
+        status: 200,
+        data: rows,
+        success: true,
+      });
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
+// get player from playerUrl
+app.get("/*players/:letter/:playerURL", (req, res) => {
+  sql = "SELECT * FROM PLAYERS";
+  if (req.params) {
+    sql += ` WHERE URL="/players/${req.params.letter}/${req.params.playerURL}"`;
+  }
+  try {
+    // const queryObject = url.parse(req.url, true).query; // query parameters
+    // if (queryObject.field && queryObject.type) sql += ` WHERE ${queryObject.field} LIKE '%${queryObject.type}%'`
+    db.all(sql, [], (err, rows) => {
+      if (err) return res.json({ status: 300, success: false, error: err });
+
+      if (rows.length < 1) return res.json({ status: 300, success: false, error: "No match" });
+      console.log(req.params);
+      return res.json({
+        status: 200,
+        data: rows,
+        success: true,
+      });
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
 
 // get teams from player
 app.get("/*players/:letter/:playerURL/teams", (req, res) => {
