@@ -13,19 +13,21 @@
   </div>
   <button @click="guessRandomPlayer">Guess random player</button>
   <div class="playersContainer">
-    <div class="player start">
-      {{ startingPlayer.name }}
-    </div>
-    <div
+    <PlayerBlock
+    class="player start"
+    :player="startingPlayer">
+    </PlayerBlock>
+    <PlayerBlock
       v-for="player in guessedPlayers"
       :key="player"
+      :player="player"
       class="player"
     >
-      {{ player.name }}
-    </div>
-    <div class="player end">
-      {{ endingPlayer.name }}
-    </div>
+    </PlayerBlock>
+    <PlayerBlock
+      class="player end"
+      :player="endingPlayer">
+    </PlayerBlock>
   </div>
 </template>
 
@@ -34,6 +36,7 @@ import { ref, watch, watchEffect, computed, onMounted } from 'vue'
 import { usePlayerToPlayerDailyStore } from '@/stores/playerToPlayerDaily'
 import { fetchDataFromApi } from '@/api/api'
 import SearchBlock from '@/components/SearchBlock.vue'
+import PlayerBlock from '@/components/PlayerBlock.vue'
 
 const wonGame = ref(false)
 
