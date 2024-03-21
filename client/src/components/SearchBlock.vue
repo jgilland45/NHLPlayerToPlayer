@@ -77,7 +77,7 @@ function capitalize (str) {
 }
 </script>
 
-<style lang="css" scoped>
+<style lang="postcss" scoped>
 table {
   border: 2px solid #42b983;
   border-radius: 3px;

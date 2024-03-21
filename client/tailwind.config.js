@@ -1,17 +1,5 @@
 module.exports = {
-  content: [
-    './components/**/*.{vue,js,ts}',
-    './layouts/**/*.vue',
-    './pages/**/*.vue',
-    './composables/**/*.{js,ts}',
-    './plugins/**/*.{js,ts}',
-    './views/**/*.{vue,js,ts}',
-    './stores/**/*.{vue,js,ts}',
-    './App.{js,ts,vue}',
-    './app.{js,ts,vue}',
-    './Error.{js,ts,vue}',
-    './error.{js,ts,vue}'
-  ],
+  content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
   theme: {
     extend: {
       screens: {

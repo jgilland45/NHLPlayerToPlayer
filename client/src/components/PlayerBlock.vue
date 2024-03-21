@@ -34,7 +34,7 @@ watch(imgPartOfUrl, () => {
 
 </script>
 
-<style lang="css" scoped>
+<style lang="postcss" scoped>
 .player-block-container {
     padding: 10px;
     display: grid;

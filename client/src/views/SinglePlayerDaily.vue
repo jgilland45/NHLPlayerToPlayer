@@ -1,34 +1,38 @@
 <template>
-  <form id="search">
-    Search <input name="query" v-model="searchQuery">
-  </form>
-  <SearchBlock
-    :data="allPossiblePlayers"
-    :columns="gridColumns"
-    :filterKey="searchQuery"
-    @choose="guessPlayer">
-  </SearchBlock>
-  <div v-if="wonGame">
-    You win!!
-  </div>
-  <button @click="guessRandomPlayer">Guess random player</button>
-  <div class="playersContainer">
-    <PlayerBlock
-    class="player start"
-    :player="startingPlayer">
-    </PlayerBlock>
-    <PlayerBlock
-      v-for="player in guessedPlayers"
-      :key="player"
-      :player="player"
-      class="player"
-    >
-    </PlayerBlock>
-    <PlayerBlock
-      class="player end"
-      :player="endingPlayer">
-    </PlayerBlock>
-  </div>
+    <div class="single-player-daily-container">
+        <div v-if="wonGame">
+            You win!!
+        </div>
+        <button @click="guessRandomPlayer">Guess random player</button>
+        <div class="playersContainer">
+            <PlayerBlock
+            class="player start"
+            :player="startingPlayer">
+            </PlayerBlock>
+            <PlayerBlock
+                v-for="player in guessedPlayers"
+                :key="player"
+                :player="player"
+                class="player"
+            >
+            </PlayerBlock>
+            <PlayerBlock
+                class="player end"
+                :player="endingPlayer">
+            </PlayerBlock>
+        </div>
+        <div class="search-block">
+            <form v-on:submit.prevent="onSubmit" id="search">
+                Search <input name="query" v-model="searchQuery" class="search-bar">
+            </form>
+            <SearchBlock
+                :data="allPossiblePlayers"
+                :columns="gridColumns"
+                :filterKey="searchQuery"
+                @choose="guessPlayer">
+            </SearchBlock>
+        </div>
+    </div>
 </template>
 
 <script setup>
@@ -89,6 +93,8 @@ const guessRandomPlayer = () => {
   }
 }
 
+const onSubmit = () => console.log('submitted form')
+
 watchEffect(async () => {
   try {
     const playerData = await fetchDataFromApi('players')
@@ -116,25 +122,26 @@ watch(currentPlayer, async () => {
 
 </script>
 
-<style lang="css" scoped>
-.playersContainer {
-  flex: 1 1 auto;
-  flex-direction: column;
-  position: absolute;
-}
-.player {
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 10px;
-  padding-left: 5px;
-  font-size: 20px;
-  border: 2px solid black;
-}
-.start {
-  background-color: green;
-}
-.end {
-  background-color: red;
+<style lang="postcss" scoped>
+.single-player-daily-container {
+    @apply flex flex-col flex-auto justify-center items-center gap-5;
+    .playersContainer {
+        @apply flex flex-col flex-auto;
+        .player {
+            @apply mt-3 pl-1 text-xl border-2 border-black;
+        }
+        .start {
+            @apply bg-green-500;
+        }
+        .end {
+            @apply bg-red-500;
+        }
+    }
+    .search-block {
+        @apply border p-2;
+        .search-bar {
+            @apply bg-gray-100 border border-black;
+        }
+    }
 }
 </style>
