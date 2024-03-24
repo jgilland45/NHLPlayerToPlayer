@@ -79,7 +79,6 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
         } else {
             incorrectGuesses.value.push(guessedPlayer)
             console.log('not found!')
-            console.log(currentPlayerTeammates.value)
             return
         }
         if (guessedPlayer.URL === endingPlayer.value.URL) {

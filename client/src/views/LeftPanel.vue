@@ -59,7 +59,7 @@ const setPanelSize = () => {
 
 <style lang="postcss" scoped>
 .left-panel-container {
-    @apply bg-[#1a1a1a] absolute left-0 top-0 h-full w-[10%] min-w-12;
+    @apply bg-[#1a1a1a] h-full w-[10%] min-w-12;
 
     &.small {
         @apply w-[3%];

@@ -14,7 +14,7 @@
     </thead>
     <tbody>
       <tr v-for="entry in filteredData"
-      :key="entry.url"
+      :key="entry.URL"
       @click="onRowClick(entry)">
         <td v-for="key in columns"
         :key="key">
