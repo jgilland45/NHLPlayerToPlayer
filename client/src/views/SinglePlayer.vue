@@ -12,7 +12,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 function goToDaily () {
-  router.push('single-player/daily')
+    router.push('single-player/daily')
 }
 
 </script>

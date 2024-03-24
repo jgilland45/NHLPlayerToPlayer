@@ -18,6 +18,7 @@
     "vue-router": "^4.0.3"
   },
   "devDependencies": {
+    "@iconify/vue": "^4.1.1",
     "@vue/cli-plugin-eslint": "~5.0.0",
     "@vue/cli-plugin-router": "~5.0.0",
     "@vue/cli-service": "~5.0.0",

@@ -23,57 +23,56 @@
       </tr>
     </tbody>
   </table>
-  <p v-else>No matches found.</p>
 </template>
 
 <script setup>
 import { ref, computed, defineProps, defineEmits } from 'vue'
 
 const props = defineProps({
-  data: Array,
-  columns: Array,
-  filterKey: String
+    data: Array,
+    columns: Array,
+    filterKey: String
 })
 
 const emit = defineEmits(['choose'])
 
 const onRowClick = (player) => {
-  emit('choose', player)
+    emit('choose', player)
 }
 
 const sortKey = ref('')
 const sortOrders = ref(props.columns.reduce((o, key) => (((o[key] = 1), o)), {}))
 
 const filteredData = computed(() => {
-  let { data, filterKey } = props
-  if (filterKey) {
+    let { data, filterKey } = props
+    if (filterKey) {
     // https://stackoverflow.com/questions/990904/remove-accents-diacritics-in-a-string-in-javascript
-    filterKey = filterKey.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
-    data = data.filter((row) => {
-      return Object.keys(row).some((key) => {
-        return String(row[key]).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().indexOf(filterKey) > -1
-      })
-    })
-  }
-  const key = sortKey.value
-  if (key) {
-    const order = sortOrders.value[key]
-    data = data.slice().sort((a, b) => {
-      a = a[key]
-      b = b[key]
-      return (a === b ? 0 : a > b ? 1 : -1) * order
-    })
-  }
-  return data
+        filterKey = filterKey.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+        data = data.filter((row) => {
+            return Object.keys(row).some((key) => {
+                return String(row[key]).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().indexOf(filterKey) > -1
+            })
+        })
+    }
+    const key = sortKey.value
+    if (key) {
+        const order = sortOrders.value[key]
+        data = data.slice().sort((a, b) => {
+            a = a[key]
+            b = b[key]
+            return (a === b ? 0 : a > b ? 1 : -1) * order
+        })
+    }
+    return data
 })
 
 function sortBy (key) {
-  sortKey.value = key
-  sortOrders.value[key] *= -1
+    sortKey.value = key
+    sortOrders.value[key] *= -1
 }
 
 function capitalize (str) {
-  return str.charAt(0).toUpperCase() + str.slice(1)
+    return str.charAt(0).toUpperCase() + str.slice(1)
 }
 </script>
 

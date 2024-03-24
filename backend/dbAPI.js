@@ -64,6 +64,84 @@ app.get("/players", (req, res) => {
   }
 });
 
+// get all teams
+app.get("/teams", (req, res) => {
+  sql = "SELECT * FROM TEAMS";
+  try {
+    // const queryObject = url.parse(req.url, true).query; // query parameters
+    // if (queryObject.field && queryObject.type) sql += ` WHERE ${queryObject.field} LIKE '%${queryObject.type}%'`
+    db.all(sql, [], (err, rows) => {
+      if (err) return res.json({ status: 300, success: false, error: err });
+
+      if (rows.length < 1) return res.json({ status: 300, success: false, error: "No match" });
+      console.log('returned all teams!');
+      return res.json({
+        status: 200,
+        data: rows,
+        success: true,
+      });
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
+// get all player team data
+app.get("/playersteams", (req, res) => {
+  sql = "SELECT * FROM PLAYER_TEAMS";
+  try {
+    // const queryObject = url.parse(req.url, true).query; // query parameters
+    // if (queryObject.field && queryObject.type) sql += ` WHERE ${queryObject.field} LIKE '%${queryObject.type}%'`
+    db.all(sql, [], (err, rows) => {
+      if (err) return res.json({ status: 300, success: false, error: err });
+
+      if (rows.length < 1) return res.json({ status: 300, success: false, error: "No match" });
+      console.log('returned all players teams!');
+      return res.json({
+        status: 200,
+        data: rows,
+        success: true,
+      });
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
+// get all player teammate data
+app.get("/playersteammates", (req, res) => {
+  sql = "SELECT * FROM PLAYER_TEAMMATES_TEAMS";
+  try {
+    // const queryObject = url.parse(req.url, true).query; // query parameters
+    // if (queryObject.field && queryObject.type) sql += ` WHERE ${queryObject.field} LIKE '%${queryObject.type}%'`
+    db.all(sql, [], (err, rows) => {
+      if (err) return res.json({ status: 300, success: false, error: err });
+
+      if (rows.length < 1) return res.json({ status: 300, success: false, error: "No match" });
+      console.log('returned all players teammates!');
+      return res.json({
+        status: 200,
+        data: rows,
+        success: true,
+      });
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
 // get player from playerUrl
 app.get("/*players/:letter/:playerURL", (req, res) => {
   sql = "SELECT * FROM PLAYERS";

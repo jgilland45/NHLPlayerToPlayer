@@ -14,7 +14,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 function goToSinglePlayer () {
-  router.push('single-player')
+    router.push('single-player')
 }
 
 </script>
