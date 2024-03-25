@@ -11,31 +11,15 @@
 
 <script setup>
 import { ref, watch, computed, defineProps, defineEmits } from 'vue'
+import { getHeadshotFromUrl } from '@/composables/usePlayerImg'
 
 const props = defineProps({
-    player: { NAME: String, URL: String }
-})
-const getImgUrl = ref(true)
-const imgPartOfUrl = computed(() => props.player.URL ? props.player.URL.slice(11, -5) : '')
-const imgSrc = computed(() => {
-    if (props.player.URL) {
-        return getImgUrl.value !== false ? `https://www.puckdoku.com/faces/${imgPartOfUrl.value}.jpg` : 'https://assets.nhle.com/mugs/nhl/default-skater.png'
-    }
-    return 'https://assets.nhle.com/mugs/nhl/default-skater.png'
+    player: { NAME: String, URL: String, IMGURL: String }
 })
 
-watch(imgPartOfUrl, () => {
-    if (imgPartOfUrl.value === '') {
-        getImgUrl.value = false
-    } else {
-    // https://stackoverflow.com/questions/18837735/check-if-image-exists-on-server-using-javascript
-        const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl.value}.jpg`
-        const img = new Image()
-        img.onload = () => { getImgUrl.value = true }
-        img.onerror = () => { getImgUrl.value = false }
-        img.src = imgURL
-    }
-}, { immediate: true })
+const { newPlayerImgUrL } = getHeadshotFromUrl(props.player)
+
+const imgSrc = computed(() => props.player ? props.player.IMGURL : '')
 
 </script>
 

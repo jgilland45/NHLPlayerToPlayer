@@ -89,7 +89,7 @@ const onSubmit = () => console.log('submitted form')
                 @apply flex flex-col items-center w-full;
             }
             .player {
-                @apply mt-3 pl-1 text-xl border-2 border-black w-[40%] min-w-56;
+                @apply mt-3 pl-1 text-xl border-2 border-black w-[40%] min-w-56 bg-white;
             }
             .start {
                 @apply bg-green-500;
@@ -99,7 +99,7 @@ const onSubmit = () => console.log('submitted form')
             }
         }
         .search-block {
-            @apply flex flex-col p-2 flex-1 items-center gap-4;
+            @apply flex flex-col p-2 flex-1 items-center gap-4 bg-gray-100;
             #search {
                 @apply text-2xl;
             }

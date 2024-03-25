@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import usePlayers from '@/composables/usePlayers'
 import usePlayerTeammates from '@/composables/usePlayerTeammates'
+import { getHeadshotFromUrl } from '@/utils/helpers'
 
 export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore', () => {
     const players = usePlayers()
@@ -33,8 +34,25 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
         return 0
     })
 
-    const startingPlayer = computed(() => allPlayers.value ? allPlayers.value[startingRandNum.value] : {})
-    const endingPlayer = computed(() => allPlayers.value ? allPlayers.value[endingRandNum.value] : {})
+    const startingPlayer = computed(() => {
+        if (allPlayers.value) {
+            const startP = allPlayers.value[startingRandNum.value]
+            const imgPartOfUrl = startP.URL.slice(11, -5)
+            const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
+            return { ...startP, IMGURL: imgURL }
+        }
+        return {}
+    })
+    const endingPlayer = computed(() => {
+        if (allPlayers.value) {
+            const endP = allPlayers.value[endingRandNum.value]
+            const imgPartOfUrl = endP.URL.slice(11, -5)
+            const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
+            console.log('END PLAYER: ', { ...endP, IMGURL: imgURL })
+            return { ...endP, IMGURL: imgURL }
+        }
+        return {}
+    })
 
     const currentPlayer = ref(startingPlayer.value)
     const currentPlayerTeammates = computed(() => allPlayersTeammates.value.filter(d => d.PLAYERURL === currentPlayer.value.URL))
@@ -54,7 +72,15 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
                     currPossiblePlayers.splice(playerIndex, 1)
                 }
             }
-            return currPossiblePlayers
+            const newCurrPossiblePlayers = currPossiblePlayers.map(d => {
+                const imgPartOfUrl = d.URL.slice(11, -5)
+                const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
+                return {
+                    ...d,
+                    IMGURL: imgURL
+                }
+            })
+            return newCurrPossiblePlayers
         }
         return []
     })

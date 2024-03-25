@@ -78,20 +78,11 @@ function capitalize (str) {
 
 <style lang="postcss" scoped>
 table {
-  border: 2px solid #42b983;
-  border-radius: 3px;
-  background-color: #fff;
+  @apply border-2 border-solid border-black bg-white;
 }
 
 th {
-  background-color: #42b983;
-  color: rgba(255, 255, 255, 0.66);
-  cursor: pointer;
-  user-select: none;
-}
-
-td {
-  background-color: #f9f9f9;
+  @apply text-white bg-black cursor-pointer select-none;
 }
 
 th,
@@ -108,10 +99,12 @@ th.active .arrow {
   opacity: 1;
 }
 
+tr {
+  @apply bg-white border;
+}
+
 tr:hover {
-  color:#42b983;
-  text-decoration: underline;
-  cursor: pointer;
+  @apply bg-[#999999] cursor-pointer;
 }
 
 .arrow {
