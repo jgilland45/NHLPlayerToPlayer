@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { ref, watch, watchEffect, computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { usePlayerToPlayerDailyStore } from '@/stores/playerToPlayerDaily'
 import LeftPanel from '@/views/LeftPanel.vue'
 import SearchBlock from '@/components/SearchBlock.vue'

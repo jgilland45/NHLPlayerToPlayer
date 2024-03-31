@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import usePlayers from '@/composables/usePlayers'
 import usePlayerTeammates from '@/composables/usePlayerTeammates'
-import { getHeadshotFromUrl } from '@/utils/helpers'
 
 export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore', () => {
     const players = usePlayers()
@@ -36,20 +35,13 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
 
     const startingPlayer = computed(() => {
         if (allPlayers.value) {
-            const startP = allPlayers.value[startingRandNum.value]
-            const imgPartOfUrl = startP.URL.slice(11, -5)
-            const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
-            return { ...startP, IMGURL: imgURL }
+            return allPlayers.value[startingRandNum.value]
         }
         return {}
     })
     const endingPlayer = computed(() => {
         if (allPlayers.value) {
-            const endP = allPlayers.value[endingRandNum.value]
-            const imgPartOfUrl = endP.URL.slice(11, -5)
-            const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
-            console.log('END PLAYER: ', { ...endP, IMGURL: imgURL })
-            return { ...endP, IMGURL: imgURL }
+            return allPlayers.value[endingRandNum.value]
         }
         return {}
     })
@@ -72,15 +64,7 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
                     currPossiblePlayers.splice(playerIndex, 1)
                 }
             }
-            const newCurrPossiblePlayers = currPossiblePlayers.map(d => {
-                const imgPartOfUrl = d.URL.slice(11, -5)
-                const imgURL = `https://www.puckdoku.com/faces/${imgPartOfUrl}.jpg`
-                return {
-                    ...d,
-                    IMGURL: imgURL
-                }
-            })
-            return newCurrPossiblePlayers
+            return currPossiblePlayers
         }
         return []
     })

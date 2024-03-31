@@ -4,22 +4,26 @@
             {{ props.player.NAME }}
         </div>
         <div class="player-headshot">
-            <img :src="imgSrc" width="100px"/>
+            <img
+                :src="props.player.IMGURL"
+                width="100px"
+                @error="imageLoadError"
+            />
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, watch, computed, defineProps, defineEmits } from 'vue'
-import { getHeadshotFromUrl } from '@/composables/usePlayerImg'
+import { defineProps } from 'vue'
 
 const props = defineProps({
     player: { NAME: String, URL: String, IMGURL: String }
 })
 
-const { newPlayerImgUrL } = getHeadshotFromUrl(props.player)
-
-const imgSrc = computed(() => props.player ? props.player.IMGURL : '')
+const imageLoadError = (e) => {
+    console.log('IMAGE FAILED TO LOAD')
+    e.target.src = 'https://assets.nhle.com/mugs/nhl/default-skater.png'
+}
 
 </script>
 
