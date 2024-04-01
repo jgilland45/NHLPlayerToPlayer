@@ -32,7 +32,7 @@
                 :show-icon="smallPanel"
                 :icon="'ph:infinity-bold'"
                 :label="'Single Player Unlimited'"
-                :link="'/'"
+                :link="'/single-player/unlimited'"
             />
             <ButtonLink
                 :show-icon="smallPanel"
@@ -59,7 +59,7 @@ const setPanelSize = () => {
 
 <style lang="postcss" scoped>
 .left-panel-container {
-    @apply bg-[#1a1a1a] h-full w-[10%] min-w-12;
+    @apply bg-[#1a1a1a] h-full w-[10%] min-w-12 z-50;
 
     &.small {
         @apply w-[3%];

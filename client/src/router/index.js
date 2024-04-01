@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeScreen from '../views/HomeScreen.vue'
 import SinglePlayer from '@/views/SinglePlayer.vue'
 import SinglePlayerDaily from '@/views/SinglePlayerDaily.vue'
+import SinglePlayerUnlimited from '@/views/SinglePlayerUnlimited.vue'
 
 const routes = [
     {
@@ -18,6 +19,11 @@ const routes = [
         path: '/single-player/daily',
         name: 'single-player-daily',
         component: SinglePlayerDaily
+    },
+    {
+        path: '/single-player/unlimited',
+        name: 'single-player-unlimited',
+        component: SinglePlayerUnlimited
     }
 ]
 

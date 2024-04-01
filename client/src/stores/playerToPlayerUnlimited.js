@@ -1,14 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import usePlayers from '@/composables/usePlayers'
-import usePlayerTeammates from '@/composables/usePlayerTeammates'
+import { usePlayersStore } from '@/stores/players'
 
-export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore', () => {
-    const players = usePlayers()
-    const playersTeammates = usePlayerTeammates()
+export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimitedStore', () => {
+    const playersStore = usePlayersStore()
 
-    const allPlayers = computed(() => players.value)
-    const allPlayersTeammates = computed(() => playersTeammates.value)
+    const allPlayers = computed(() => playersStore.players)
+    const allPlayersTeammates = computed(() => playersStore.playersTeammates)
 
     const numTotalPlayers = computed(() => allPlayers.value ? allPlayers.value.length : 0)
 
@@ -89,6 +87,8 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
         } else {
             incorrectGuesses.value.push(guessedPlayer)
             console.log('not found!')
+            console.log('player: ')
+            console.log(currentPlayerTeammates.value)
             return
         }
         if (guessedPlayer.URL === endingPlayer.value.URL) {
@@ -104,6 +104,16 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
 
     const getPlayerByUrl = (url) => {
         return allPlayers.value.find(x => x.url === url)
+    }
+
+    const resetGame = () => {
+        console.log('RESET GAME')
+        guessedPlayers.value = []
+        incorrectGuesses.value = []
+        randNum1.value = Math.random()
+        randNum2.value = Math.random()
+        currentPlayer.value = startingPlayer.value
+        wonGame.value = false
     }
 
     watch(startingPlayer, (newP, oldP) => {
@@ -124,6 +134,7 @@ export const usePlayerToPlayerDailyStore = defineStore('playerToPlayerDailyStore
 
         getPlayerByUrl,
         guessRandomPlayer,
-        guessPlayer
+        guessPlayer,
+        resetGame
     }
 })
