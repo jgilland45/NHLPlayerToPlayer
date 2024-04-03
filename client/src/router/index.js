@@ -3,6 +3,7 @@ import HomeScreen from '../views/HomeScreen.vue'
 import SinglePlayer from '@/views/SinglePlayer.vue'
 import SinglePlayerDaily from '@/views/SinglePlayerDaily.vue'
 import SinglePlayerUnlimited from '@/views/SinglePlayerUnlimited.vue'
+import BlockGame from '@/views/BlockGame.vue'
 
 const routes = [
     {
@@ -24,6 +25,11 @@ const routes = [
         path: '/single-player/unlimited',
         name: 'single-player-unlimited',
         component: SinglePlayerUnlimited
+    },
+    {
+        path: '/block-game',
+        name: 'block-game',
+        component: BlockGame
     }
 ]
 
