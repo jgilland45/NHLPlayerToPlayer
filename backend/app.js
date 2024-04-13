@@ -16,45 +16,48 @@ const io = new Server(server, {
     pingTimeout: 5000
 })
 
-const players = {}
+const backendPlayers = {}
+const SPEED = 10
 
 io.on("connection", socket => {
     console.log('a new player connected')
-    players[socket.id] = {
+    backendPlayers[socket.id] = {
         x: Math.floor(Math.random() * 640),
-        y: Math.floor(Math.random() * 480)
+        y: Math.floor(Math.random() * 480),
+        sequenceNumber: 0,
     }
 
-    io.emit('updatePlayers', players)
+    io.emit('updatePlayers', backendPlayers)
 
     socket.on('disconnect', (reason) => {
         console.log(reason)
-        delete players[socket.id]
-        io.emit('updatePlayers', players)
+        delete backendPlayers[socket.id]
+        io.emit('updatePlayers', backendPlayers)
     })
 
-    socket.on('move', (direction) => {
+    socket.on('move', ({ direction, sequenceNumber }) => {
+        backendPlayers[socket.id].sequenceNumber = sequenceNumber
         switch (direction) {
             case 'up':
-                players[socket.id].y -= 5
+                backendPlayers[socket.id].y -= SPEED
                 break
             case 'down':
-                players[socket.id].y += 5
+                backendPlayers[socket.id].y += SPEED
                 break
             case 'left':
-                players[socket.id].x -= 5
+                backendPlayers[socket.id].x -= SPEED
                 break
             case 'right':
-                players[socket.id].x += 5
+                backendPlayers[socket.id].x += SPEED
                 break
         }
     })
 
-    console.log(players)
+    console.log(backendPlayers)
 });
 
 setInterval(() => {
-    io.emit('updatePlayers', players)
+    io.emit('updatePlayers', backendPlayers)
 }, 15)
 
 server.listen(3001, () => {
