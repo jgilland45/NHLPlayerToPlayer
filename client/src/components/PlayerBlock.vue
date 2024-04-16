@@ -42,6 +42,7 @@ const imageLoadError = (e) => {
     grid-area: name;
 }
 .player-headshot {
+    @apply h-[100px] w-[100px] overflow-hidden;
     grid-area: photo;
 }
 </style>

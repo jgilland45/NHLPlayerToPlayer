@@ -14,12 +14,23 @@
             />
         </div>
         <div class="content-container">
+            <div class="search-block">
+                <SearchBar
+                    :searchText="searchInputText"
+                    @search="setSearchText"
+                />
+                <SearchBlock
+                    :data="allPossiblePlayers"
+                    :filterKey="searchInputText"
+                    @choose="playerToPlayerUnlimitedStore.guessPlayer">
+                </SearchBlock>
+            </div>
             <div class="playersContainer">
                 <div class="reverse-container">
                     <div class="overflow-players">
                         <PlayerBlock
-                        class="player start"
-                        :player="startingPlayer">
+                            class="player start"
+                            :player="startingPlayer">
                         </PlayerBlock>
                         <PlayerBlock
                             v-for="player in guessedPlayers"
@@ -35,32 +46,18 @@
                     :player="endingPlayer">
                 </PlayerBlock>
             </div>
-            <div class="search-block">
-                <form
-                    v-on:submit.prevent="onSubmit"
-                    id="search"
-                    autocomplete="off"
-                >
-                    Search <input name="query" v-model="playerToPlayerUnlimitedStore.searchQuery" class="search-bar">
-                </form>
-                <SearchBlock
-                    :data="allPossiblePlayers"
-                    :columns="gridColumns"
-                    :filterKey="playerToPlayerUnlimitedStore.searchQuery"
-                    @choose="playerToPlayerUnlimitedStore.guessPlayer">
-                </SearchBlock>
-            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { usePlayerToPlayerUnlimitedStore } from '@/stores/playerToPlayerUnlimited'
 import LeftPanel from '@/views/LeftPanel.vue'
 import SearchBlock from '@/components/SearchBlock.vue'
 import PlayerBlock from '@/components/PlayerBlock.vue'
 import ButtonLink from '@/components/ButtonLink.vue'
+import SearchBar from '@/components/SearchBar.vue'
 
 const playerToPlayerUnlimitedStore = usePlayerToPlayerUnlimitedStore()
 
@@ -73,9 +70,11 @@ const guessedPlayers = computed(() => playerToPlayerUnlimitedStore.guessedPlayer
 
 const resetGame = computed(() => playerToPlayerUnlimitedStore.resetGame)
 
-const gridColumns = ['URL', 'NAME']
+const searchInputText = ref('')
 
-const onSubmit = () => console.log('submitted form')
+const setSearchText = (inputText) => {
+    searchInputText.value = inputText
+}
 
 </script>
 
@@ -89,9 +88,9 @@ const onSubmit = () => console.log('submitted form')
         }
     }
     .content-container {
-        @apply flex flex-row flex-1 h-full;
+        @apply flex flex-col flex-1 h-full py-40 bg-gray-100 items-center;
         .playersContainer {
-            @apply flex flex-col flex-1 items-center bg-gray-100 py-5;
+            @apply flex flex-col flex-1 items-center py-5 w-full;
             /* https://stackoverflow.com/questions/18614301/keep-overflow-div-scrolled-to-bottom-unless-user-scrolls-up */
             /* https://codepen.io/anon/pen/pdrLEZ */
             .reverse-container {
@@ -107,7 +106,7 @@ const onSubmit = () => console.log('submitted form')
                 @apply flex flex-col items-center w-full;
             }
             .player {
-                @apply mt-3 pl-1 text-xl border-2 border-black w-[40%] min-w-56 bg-white;
+                @apply flex-auto mt-3 pl-1 text-xl border-2 border-black w-[40%] min-w-[350px] max-w-xl bg-white;
             }
             .start {
                 @apply bg-green-500;
@@ -117,13 +116,13 @@ const onSubmit = () => console.log('submitted form')
             }
         }
         .search-block {
-            @apply flex flex-col p-2 flex-1 items-center gap-4 bg-gray-100;
-            #search {
+            @apply flex flex-col p-2 flex-1 items-center gap-4 bg-gray-100 w-[40%] min-w-[350px] max-w-xl;
+            /* #search {
                 @apply text-2xl;
             }
             .search-bar {
                 @apply bg-gray-100 border border-black;
-            }
+            } */
         }
     }
 }

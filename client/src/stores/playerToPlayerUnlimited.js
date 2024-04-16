@@ -9,8 +9,6 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
     const allPlayersTeammates = computed(() => playersStore.playersTeammates)
 
     const numTotalPlayers = computed(() => allPlayers.value ? allPlayers.value.length : 0)
-
-    const searchQuery = ref('')
     const wonGame = ref(false)
 
     const guessedPlayers = ref([])
@@ -99,7 +97,6 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
         if (playerIndex > -1) {
             allPossiblePlayers.value.splice(playerIndex, 1)
         }
-        searchQuery.value = ''
     }
 
     const getPlayerByUrl = (url) => {
@@ -128,7 +125,6 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
         allPlayers,
         numTotalPlayers,
         wonGame,
-        searchQuery,
         allPossiblePlayers,
         guessedPlayers,
 
