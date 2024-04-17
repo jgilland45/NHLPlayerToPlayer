@@ -14,6 +14,9 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
     const guessedPlayers = ref([])
     const incorrectGuesses = ref([])
 
+    const resetSearch = ref(false)
+    const resetSearchBar = ref(false)
+
     const randNum1 = ref(Math.random())
     const randNum2 = ref(Math.random())
 
@@ -97,6 +100,8 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
         if (playerIndex > -1) {
             allPossiblePlayers.value.splice(playerIndex, 1)
         }
+        resetSearch.value = true
+        resetSearchBar.value = true
     }
 
     const getPlayerByUrl = (url) => {
@@ -113,6 +118,14 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
         wonGame.value = false
     }
 
+    const resetSearchTerm = () => {
+        resetSearch.value = false
+    }
+
+    const resetSearchBarTerm = () => {
+        resetSearchBar.value = false
+    }
+
     watch(startingPlayer, (newP, oldP) => {
         if (Object.keys(oldP).length === 0) {
             currentPlayer.value = newP
@@ -127,10 +140,14 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
         wonGame,
         allPossiblePlayers,
         guessedPlayers,
+        resetSearch,
+        resetSearchBar,
 
         getPlayerByUrl,
         guessRandomPlayer,
         guessPlayer,
-        resetGame
+        resetGame,
+        resetSearchTerm,
+        resetSearchBarTerm
     }
 })

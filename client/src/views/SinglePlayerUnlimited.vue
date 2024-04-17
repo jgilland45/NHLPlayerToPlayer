@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { usePlayerToPlayerUnlimitedStore } from '@/stores/playerToPlayerUnlimited'
 import LeftPanel from '@/views/LeftPanel.vue'
 import SearchBlock from '@/components/SearchBlock.vue'
@@ -69,12 +69,20 @@ const allPossiblePlayers = computed(() => playerToPlayerUnlimitedStore.allPossib
 const guessedPlayers = computed(() => playerToPlayerUnlimitedStore.guessedPlayers)
 
 const resetGame = computed(() => playerToPlayerUnlimitedStore.resetGame)
+const resetSearch = computed(() => playerToPlayerUnlimitedStore.resetSearch)
 
 const searchInputText = ref('')
 
 const setSearchText = (inputText) => {
     searchInputText.value = inputText
 }
+
+watch(resetSearch, () => {
+    if (resetSearch.value) {
+        searchInputText.value = ''
+        playerToPlayerUnlimitedStore.resetSearchTerm()
+    }
+})
 
 </script>
 

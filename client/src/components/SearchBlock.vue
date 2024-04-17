@@ -8,7 +8,7 @@
       :key="datum.URL"
       :player="datum"
       class="player-block"
-      @click="onSelect(datum.URL)"
+      @click="onSelect(datum)"
     />
   </div>
 </template>
@@ -29,7 +29,7 @@ const emit = defineEmits(['choose'])
 const filter = computed(() => props.filterKey.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase())
 
 const onSelect = (player) => {
-    console.log('select: ', player)
+    console.log(player)
     emit('choose', player)
 }
 
@@ -58,9 +58,7 @@ const filteredData = computed(() => {
         keys: ['searchName']
     }
     const fuse = new Fuse(unfilteredData, fuseOptions)
-    console.log(filter.value)
-    console.log(fuse.search(filter.value))
-    return filter.value ? fuse.search(filter.value).map(d => d.item) : []
+    return filter.value ? fuse.search(filter.value).map(d => d.item).map(({ searchName, ...items }) => items) : []
 })
 </script>
 

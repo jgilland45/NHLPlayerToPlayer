@@ -14,8 +14,11 @@
 </template>
 
 <script lang="js" setup>
-import { ref, watch, defineEmits, defineProps } from 'vue'
+import { ref, watch, defineEmits, defineProps, computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { usePlayerToPlayerUnlimitedStore } from '@/stores/playerToPlayerUnlimited'
+
+const store = usePlayerToPlayerUnlimitedStore()
 
 const props = defineProps({
     searchText: String
@@ -24,6 +27,13 @@ const props = defineProps({
 const emit = defineEmits(['search'])
 
 const text = ref(props.searchText)
+
+const resetSearch = computed(() => store.resetSearchBar)
+
+watch(resetSearch, () => {
+    text.value = ''
+    store.resetSearchBarTerm()
+})
 
 watch(text, (value) => {
     emit('search', value)
