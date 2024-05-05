@@ -1,0 +1,4 @@
+- show years played on player cards
+- change search cards to only show names and years played
+- add in message for incorrect guess
+- fix backend to update from past update date to current date

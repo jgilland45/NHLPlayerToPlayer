@@ -1,28 +1,19 @@
 <template>
     <div class="player-block-container">
         <div class="name-text">
-            {{ props.player?.NAME ?? '' }}
+            {{ props.player.NAME }}
         </div>
-        <div class="player-headshot">
-            <img
-                :src="playerPhotoURL"
-                width="100px"
-                @error="imageLoadError"
-            />
+        <div class="player-years">
         </div>
     </div>
 </template>
 
 <script setup>
-import { defineProps, computed } from 'vue'
+import { defineProps } from 'vue'
 
 const props = defineProps({
     player: { NAME: String, URL: String, IMGURL: String }
 })
-
-const playerObj = computed(() => props.player)
-
-const playerPhotoURL = computed(() => playerObj.value?.IMGURL ?? 'https://assets.nhle.com/mugs/nhl/default-skater.png')
 
 const imageLoadError = (e) => {
     console.log('IMAGE FAILED TO LOAD')

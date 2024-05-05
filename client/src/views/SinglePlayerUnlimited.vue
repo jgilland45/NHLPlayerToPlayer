@@ -25,21 +25,22 @@
                     @choose="playerToPlayerUnlimitedStore.guessPlayer">
                 </SearchBlock>
             </div>
-            <div class="playersContainer">
-                <div class="reverse-container">
-                    <div class="overflow-players">
-                        <PlayerBlock
-                            class="player start"
-                            :player="startingPlayer">
-                        </PlayerBlock>
-                        <PlayerBlock
-                            v-for="player in guessedPlayers"
-                            :key="player.URL"
-                            :player="player"
-                            class="player"
-                        >
-                        </PlayerBlock>
-                    </div>
+            <div class="players-container">
+                <div
+                    ref="scrollRef"
+                    class="scrolling-players"
+                >
+                    <PlayerBlock
+                        class="player start"
+                        :player="startingPlayer">
+                    </PlayerBlock>
+                    <PlayerBlock
+                        v-for="player in guessedPlayers"
+                        :key="player.URL"
+                        :player="player"
+                        class="player"
+                    >
+                    </PlayerBlock>
                 </div>
                 <PlayerBlock
                     class="player end"
@@ -58,6 +59,12 @@ import SearchBlock from '@/components/SearchBlock.vue'
 import PlayerBlock from '@/components/PlayerBlock.vue'
 import ButtonLink from '@/components/ButtonLink.vue'
 import SearchBar from '@/components/SearchBar.vue'
+import { useScroll, useElementBounding } from '@vueuse/core'
+
+const scrollRef = ref()
+
+const { x: scrollX, y: scrollY, arrivedState } = useScroll(scrollRef)
+const { x: myX } = useElementBounding(scrollRef)
 
 const playerToPlayerUnlimitedStore = usePlayerToPlayerUnlimitedStore()
 
@@ -84,6 +91,14 @@ watch(resetSearch, () => {
     }
 })
 
+watch(() => guessedPlayers.value.length, () => {
+    console.log('myX:', myX.value)
+    console.log('scrollRef:', scrollRef.value)
+    console.log('arrivedState:', arrivedState.value)
+    console.log('scrollY:', scrollY.value)
+    scrollY.value += 100
+}, { immediate: true })
+
 </script>
 
 <style lang="postcss" scoped>
@@ -97,30 +112,26 @@ watch(resetSearch, () => {
     }
     .content-container {
         @apply flex flex-col flex-1 h-full py-40 bg-gray-100 items-center;
-        .playersContainer {
-            @apply flex flex-col flex-1 items-center py-5 w-full;
+        .players-container {
+            @apply flex flex-col flex-auto items-center py-5;
             /* https://stackoverflow.com/questions/18614301/keep-overflow-div-scrolled-to-bottom-unless-user-scrolls-up */
             /* https://codepen.io/anon/pen/pdrLEZ */
-            .reverse-container {
-                @apply flex flex-col-reverse w-full overflow-y-auto overflow-x-hidden;
-                -ms-overflow-style: none;
+            .scrolling-players {
+                @apply flex flex-col flex-auto items-center overflow-y-scroll overflow-x-hidden h-[200px];
+                /* -ms-overflow-style: none;
                 scrollbar-width: none;
-
                 &::-webkit-scrollbar {
                     display: none;
-                }
-            }
-            .overflow-players {
-                @apply flex flex-col items-center w-full;
+                } */
             }
             .player {
                 @apply flex-auto mt-3 pl-1 text-xl border-2 border-black w-[40%] min-w-[350px] max-w-xl bg-white;
-            }
-            .start {
-                @apply bg-green-500;
-            }
-            .end {
-                @apply bg-red-500;
+                &.start {
+                    @apply bg-green-500;
+                }
+                &.end {
+                    @apply bg-red-500;
+                }
             }
         }
         .search-block {

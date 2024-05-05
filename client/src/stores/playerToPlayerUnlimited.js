@@ -5,7 +5,11 @@ import { usePlayersStore } from '@/stores/players'
 export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimitedStore', () => {
     const playersStore = usePlayersStore()
 
-    const allPlayers = computed(() => playersStore.players)
+    const allPlayers = computed(() => {
+        const newPlayers = playersStore.players
+        console.log(newPlayers)
+        return newPlayers
+    })
     const allPlayersTeammates = computed(() => playersStore.playersTeammates)
 
     const numTotalPlayers = computed(() => allPlayers.value ? allPlayers.value.length : 0)
@@ -127,7 +131,8 @@ export const usePlayerToPlayerUnlimitedStore = defineStore('playerToPlayerUnlimi
     }
 
     watch(startingPlayer, (newP, oldP) => {
-        if (Object.keys(oldP).length === 0) {
+        // takes into account undefined original player
+        if (!oldP || Object.keys(oldP).length === 0) {
             currentPlayer.value = newP
         }
     })
