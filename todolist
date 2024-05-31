@@ -1,4 +1,16 @@
+Frontend:
 - show years played on player cards
 - change search cards to only show names and years played
 - add in message for incorrect guess
+Backend:
 - fix backend to update from past update date to current date
+- possibly use NHL API to feed into DB instead of web scraping (or look at not using a DB at all??? idk might be stupid)
+    - https://api-web.nhle.com/v1/season can get all year IDs
+    - https://api.nhle.com/stats/rest/ping to ping the server (might be useful to not waste time with errors if/when its down)
+    - https://api.nhle.com/stats/rest/en/game gets every game played ever (NEED TO VERIFY IF IT INCLUDES PRE/POSTSEASON)
+        - looks like it literally includes EVERY game, including all star games
+        - I think I should allow for regular season and post season games
+            - these are gameType = 2 and gameType = 3
+    - https://api-web.nhle.com/v1/gamecenter/{gameId}/boxscore gets the boxscore of a game (use to get players on each team)
+        - think about whether or not goalies without TOI should count
+    - https://assets.nhle.com/mugs/nhl/{yearCode}/{teamCode}/{playerId}.png to get player headshot for a certain year and team
