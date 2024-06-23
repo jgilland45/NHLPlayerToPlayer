@@ -260,5 +260,64 @@ app.get("/*players/:letter/:playerURL/:team", (req, res) => {
   }
 });
 
+// NHL API requests
+
+// ping api
+app.get("/nhl/api/ping", async (req, res) => {
+  try {
+    const response = await (await fetch('https://api.nhle.com/stats/rest/ping')).json();
+    console.log('ping', response);
+    return res.json({
+      status: 200,
+      data: response,
+      success: true,
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
+// get all games
+app.get("/nhl/api/games", async (req, res) => {
+  try {
+    const response = await (await fetch('https://api.nhle.com/stats/rest/en/game')).json();
+    console.log('Getting all games');
+    return res.json({
+      status: 200,
+      data: response,
+      success: true,
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
+// get data from game
+app.get("/nhl/api/games/:game", async (req, res) => {
+  try {
+    const response = await (await fetch(`https://api-web.nhle.com/v1/gamecenter/${req.params.game}/boxscore`)).json();
+    console.log('Getting data from game ', req.params.game);
+    return res.json({
+      status: 200,
+      data: response,
+      success: true,
+    });
+  }
+  catch (error) {
+    return res.json({
+      status: 400,
+      success: false,
+    });
+  }
+});
+
 // opens server to requests
 app.listen(3000);
