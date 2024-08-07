@@ -3,6 +3,25 @@ const API_NHLE_WEB = 'https://api-web.nhle.com/v1'
 const API_NHL_ASSETS_MUG = 'https://assets.nhle.com/mugs/nhl'
 const API_NHL_ASSETS_LOGO = 'https://assets.nhle.com/logos/nhl/svg'
 
+class Player {
+    games = []
+    constructor(playerId) {
+        this.playerId = playerId
+    }
+
+    getPlayerId() {
+        return this.playerId
+    }
+
+    getGames() {
+        return this.games
+    }
+
+    addGameIfNotInList(game) {
+        if (this.games.length === 0 || !this.games.find(d => d === game)) this.games.push(game)
+    }
+};
+
 const fetchDataFromNHLE = async (endpoint) => {
     try {
         const response = await (await fetch(`${API_NHLE}/${endpoint}`)).json()
@@ -43,26 +62,26 @@ const fetchDataFromNHLAssetsLogo = async (endpoint) => {
     }
 }
 
-const formatPlayerArray = (playerArray, teamInfo, season) => {
+const formatPlayerArray = (playerArray, teamAbbr, gameId) => {
     return playerArray.map(d => ({
         playerId: d["playerId"],
-        teamId: teamInfo.id,
-        season,
+        gameIdWithTeamAbbr: `${gameId}_${teamAbbr}`
     }))
 }
 
 const getPlayersFromGame = async (gameID) => {
     try {
         const response = await fetchDataFromNHLEWeb(`gamecenter/${gameID}/boxscore`)
-        const season = response.season;
-        const homeTeamInfo = response.homeTeam
-        const awayTeamInfo = response.awayTeam
-        const homeForwards = formatPlayerArray(response.playerByGameStats.homeTeam.forwards, homeTeamInfo, season)
-        const homeDefence = formatPlayerArray(response.playerByGameStats.homeTeam.defense, homeTeamInfo, season)
-        const homeGoalies = formatPlayerArray(response.playerByGameStats.homeTeam.goalies, homeTeamInfo, season)
-        const awayForwards = formatPlayerArray(response.playerByGameStats.awayTeam.forwards, awayTeamInfo, season)
-        const awayDefence = formatPlayerArray(response.playerByGameStats.awayTeam.defense, awayTeamInfo, season)
-        const awayGoalies = formatPlayerArray(response.playerByGameStats.awayTeam.goalies, awayTeamInfo, season)
+        console.log(`${API_NHLE_WEB}/gamecenter/${gameID}/boxscore`)
+        const gameId = response.id;
+        const homeTeamAbbr = response.homeTeam.abbrev
+        const awayTeamAbbr = response.awayTeam.abbrev
+        const homeForwards = formatPlayerArray(response.playerByGameStats.homeTeam.forwards, homeTeamAbbr, gameId)
+        const homeDefence = formatPlayerArray(response.playerByGameStats.homeTeam.defense, homeTeamAbbr, gameId)
+        const homeGoalies = formatPlayerArray(response.playerByGameStats.homeTeam.goalies, homeTeamAbbr, gameId)
+        const awayForwards = formatPlayerArray(response.playerByGameStats.awayTeam.forwards, awayTeamAbbr, gameId)
+        const awayDefence = formatPlayerArray(response.playerByGameStats.awayTeam.defense, awayTeamAbbr, gameId)
+        const awayGoalies = formatPlayerArray(response.playerByGameStats.awayTeam.goalies, awayTeamAbbr, gameId)
         const homePlayers = homeForwards.concat(homeDefence, homeGoalies)
         const awayPlayers = awayForwards.concat(awayDefence, awayGoalies)
         return {
@@ -71,21 +90,50 @@ const getPlayersFromGame = async (gameID) => {
         }
     } catch (err) {
         console.log(err)
+        return {
+            homePlayers: [],
+            awayPlayers: [],
+        }
     }
 }
 
+const playersList = []
+
 const mainDataFetcher = async () => {
-    const allGamesRaw = await fetchDataFromNHLE('en/game');
-    const allTeamsRaw = await fetchDataFromNHLE('en/team')
+    const allGamesRaw = await fetchDataFromNHLE('en/game')
     const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
-    // console.log(allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024))
-    const { homePlayers, awayPlayers } = await getPlayersFromGame(allRegularSeasonAndPlayoffGames[0].id)
-    console.log('home:', homePlayers)
-    console.log('away:', awayPlayers)
-    homePlayers.concat(awayPlayers).forEach(player => {
-        const teamTricode = allTeamsRaw.find(d => d.id === player.teamId)?.triCode
-        console.log(`${API_NHL_ASSETS_MUG}/${player.season}/${teamTricode}/${player.playerId}.png`)
+    const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 19261927 || game["season"] === 19271928)
+    for (let i = 0; i < coolGames.length; i++) {
+        const { homePlayers, awayPlayers } = await getPlayersFromGame(coolGames[i].id)
+        console.log('home:', homePlayers)
+        console.log('away:', awayPlayers)
+        homePlayers.concat(awayPlayers).forEach(player => {
+            const foundPlayer = playersList.find(d => d.getPlayerId() === player.playerId)
+            if (foundPlayer) {
+                const foundPlayerIndex = playersList.findIndex(d => d.getPlayerId() === player.playerId)
+                playersList[foundPlayerIndex].addGameIfNotInList(player.gameIdWithTeamAbbr)
+            } else {
+                const currPlayer = new Player(player.playerId)
+                currPlayer.addGameIfNotInList(player.gameIdWithTeamAbbr)
+                playersList.push(currPlayer)
+            }
+        })
+    }
+    const fs = require('node:fs');
+    playersList.forEach(player => {
+        fs.appendFile("./test.txt", `${player.getPlayerId()}: `, { flag: 'a' }, function (err) {
+            if (err) throw err
+        });
+        player.getGames().forEach(game => {
+            fs.appendFile("./test.txt", `${game}, `, { flag: 'a' }, function (err) {
+                if (err) throw err
+            });
+        })
+        fs.appendFile("./test.txt", "\n", { flag: 'a' }, function (err) {
+            if (err) throw err
+        });
     })
 }
+
 
 mainDataFetcher()

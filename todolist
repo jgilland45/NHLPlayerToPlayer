@@ -14,6 +14,11 @@ Backend:
     - https://api-web.nhle.com/v1/gamecenter/{gameId}/boxscore gets the boxscore of a game (use to get players on each team)
         - think about whether or not goalies without TOI should count
     - https://assets.nhle.com/mugs/nhl/{yearCode}/{teamCode}/{playerId}.png to get player headshot for a certain year and team
+    - https://api-web.nhle.com/v1/player/{playerId}/landing
+        - gives all the data I think I'll ever need for a player
 - idea: create new DB using NHL API
     - first check DB, get all game IDs, and only get gamecenter report for those not already in DB
     - create entry in DB for the game and each player with team
+    - have two tables:
+        - playerId as primary key, with gameIdw/Team array storing the game ID with team abbr at end
+        - gameIdw/Team as primary key, with playerId array
