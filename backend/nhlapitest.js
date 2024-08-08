@@ -1,3 +1,18 @@
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+
+let db;
+import fs from 'node:fs';
+
+// this is a top-level await 
+(async () => {
+    // open the database
+    db = await open({
+        filename: './playersTEST.db',
+        driver: sqlite3.Database
+    })
+})()
+
 const API_NHLE = 'https://api.nhle.com/stats/rest'
 const API_NHLE_WEB = 'https://api-web.nhle.com/v1'
 const API_NHL_ASSETS_MUG = 'https://assets.nhle.com/mugs/nhl'
@@ -102,7 +117,7 @@ const playersList = []
 const mainDataFetcher = async () => {
     const allGamesRaw = await fetchDataFromNHLE('en/game')
     const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
-    const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 19261927 || game["season"] === 19271928)
+    const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024 && new Date(game["gameDate"]).getTime() <= new Date(2023, 10, 15).getTime())
     for (let i = 0; i < coolGames.length; i++) {
         const { homePlayers, awayPlayers } = await getPlayersFromGame(coolGames[i].id)
         console.log('home:', homePlayers)
@@ -119,7 +134,16 @@ const mainDataFetcher = async () => {
             }
         })
     }
-    const fs = require('node:fs');
+    await db.exec('CREATE TABLE IF NOT EXISTS players (playerid INTEGER PRIMARY KEY, )')
+    await db.exec('INSERT INTO players VALUES ("test")')
+    const coolResult = await db.get('SELECT col FROM tbl WHERE col = ?', 'test')
+    console.log(coolResult)
+    await db.close()
+
+
+    fs.writeFile("./test.txt", "", { flag: 'w' }, function (err) {
+        if (err) throw err
+    });
     playersList.forEach(player => {
         fs.appendFile("./test.txt", `${player.getPlayerId()}: `, { flag: 'a' }, function (err) {
             if (err) throw err
