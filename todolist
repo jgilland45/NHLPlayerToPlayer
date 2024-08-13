@@ -22,3 +22,7 @@ Backend:
     - have two tables:
         - playerId as primary key, with gameIdw/Team array storing the game ID with team abbr at end
         - gameIdw/Team as primary key, with playerId array
+    - TODO:
+        - add in update player functionality
+        - add in (gameIdw/Team as primary key, with playerId array) table
+        - try playing with DB data in JS
