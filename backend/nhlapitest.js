@@ -117,7 +117,8 @@ const playersList = []
 const mainDataFetcher = async () => {
     const allGamesRaw = await fetchDataFromNHLE('en/game')
     const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
-    const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024 && new Date(game["gameDate"]).getTime() <= new Date(2023, 10, 15).getTime())
+    const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024)
+    // const coolGames = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024 && new Date(game["gameDate"]).getTime() <= new Date(2023, 9, 13).getTime())
     for (let i = 0; i < coolGames.length; i++) {
         const { homePlayers, awayPlayers } = await getPlayersFromGame(coolGames[i].id)
         console.log('home:', homePlayers)
@@ -134,29 +135,32 @@ const mainDataFetcher = async () => {
             }
         })
     }
-    await db.exec('CREATE TABLE IF NOT EXISTS players (playerid INTEGER PRIMARY KEY, )')
-    await db.exec('INSERT INTO players VALUES ("test")')
-    const coolResult = await db.get('SELECT col FROM tbl WHERE col = ?', 'test')
-    console.log(coolResult)
+    await db.exec('CREATE TABLE IF NOT EXISTS players (playerid INTEGER, gameids TEXT)')
+    for (let i = 0; i < playersList.length; i++) {
+        // https://stackoverflow.com/questions/1584480/insert-into-sqlite-with-variables-using-javascript/59930004#59930004
+        await db.run('INSERT INTO players(playerid, gameids) VALUES(:playerid, :gameids)', [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())])
+    }
+    // const coolResult = await db.all('SELECT * FROM players')
+    // console.log(coolResult.map(d => ({ playerid: d.playerid, gameids: JSON.parse(d.gameids) })))
     await db.close()
 
 
-    fs.writeFile("./test.txt", "", { flag: 'w' }, function (err) {
-        if (err) throw err
-    });
-    playersList.forEach(player => {
-        fs.appendFile("./test.txt", `${player.getPlayerId()}: `, { flag: 'a' }, function (err) {
-            if (err) throw err
-        });
-        player.getGames().forEach(game => {
-            fs.appendFile("./test.txt", `${game}, `, { flag: 'a' }, function (err) {
-                if (err) throw err
-            });
-        })
-        fs.appendFile("./test.txt", "\n", { flag: 'a' }, function (err) {
-            if (err) throw err
-        });
-    })
+    // fs.writeFile("./test.txt", "", { flag: 'w' }, function (err) {
+    //     if (err) throw err
+    // });
+    // playersList.forEach(player => {
+    //     fs.appendFile("./test.txt", `${player.getPlayerId()}: `, { flag: 'a' }, function (err) {
+    //         if (err) throw err
+    //     });
+    //     player.getGames().forEach(game => {
+    //         fs.appendFile("./test.txt", `${game}, `, { flag: 'a' }, function (err) {
+    //             if (err) throw err
+    //         });
+    //     })
+    //     fs.appendFile("./test.txt", "\n", { flag: 'a' }, function (err) {
+    //         if (err) throw err
+    //     });
+    // })
 }
 
 
