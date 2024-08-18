@@ -1,11 +1,11 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import _ from 'lodash-es';
 
 let db;
-import fs from 'node:fs';
 
 // this is a top-level await 
-(async () => {
+await (async () => {
     // open the database
     db = await open({
         filename: './playersTEST.db',
@@ -138,7 +138,6 @@ const addPlayerDataFromYearToDB = async (allGames, season) => {
         const row = await db.get("SELECT gameids FROM players WHERE playerid = ?", [playerid], (err) => {
             if (err) {
                 console.error(err.message);
-                db.run("ROLLBACK");
                 return;
             }
         })
@@ -157,7 +156,6 @@ const addPlayerDataFromYearToDB = async (allGames, season) => {
             await db.run("UPDATE players SET gameids = ? WHERE playerid = ?", [updatedGameIds, playerid], (err) => {
                 if (err) {
                     console.error(err.message);
-                    db.run("ROLLBACK");
                     return;
                 }
             });
@@ -167,51 +165,14 @@ const addPlayerDataFromYearToDB = async (allGames, season) => {
             await db.run("INSERT INTO players (playerid, gameids) VALUES (?, ?)", [playerid, updatedGameIds], (err) => {
                 if (err) {
                     console.error(err.message);
-                    db.run("ROLLBACK");
                     return;
                 }
             });
         }
-
-
-        // // TODO: don't set, need to append new gameids
-        // const insertQuery = `
-        //     INSERT INTO players (playerid, gameids)
-        //     VALUES (?, ?)
-        //     ON CONFLICT(playerid)
-        //     DO UPDATE SET gameids = excluded.gameids;
-        // `;
-        // // https://stackoverflow.com/questions/1584480/insert-into-sqlite-with-variables-using-javascript/59930004#59930004
-        // await db.run(insertQuery, [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())], function (err) {
-        //     if (err) {
-        //         console.error('Error executing query:', err.message);
-        //     } else {
-        //         console.log(`Player with ID ${playersList[i].getPlayerId()} has been upserted/updated.`);
-        //     }
-        // });
-        // await db.run('INSERT INTO players(playerid, gameids) VALUES(:playerid, :gameids)', [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())])
     }
     // const coolResult = await db.all('SELECT * FROM players WHERE playerid = "8471675"')
     // console.log(coolResult.map(d => ({ playerid: d.playerid, gameids: JSON.parse(d.gameids) })))
     // console.log(coolResult.map(d => JSON.parse(d.gameids).length))
-
-
-    // fs.writeFile("./test.txt", "", { flag: 'w' }, function (err) {
-    //     if (err) throw err
-    // });
-    // playersList.forEach(player => {
-    //     fs.appendFile("./test.txt", `${player.getPlayerId()}: `, { flag: 'a' }, function (err) {
-    //         if (err) throw err
-    //     });
-    //     player.getGames().forEach(game => {
-    //         fs.appendFile("./test.txt", `${game}, `, { flag: 'a' }, function (err) {
-    //             if (err) throw err
-    //         });
-    //     })
-    //     fs.appendFile("./test.txt", "\n", { flag: 'a' }, function (err) {
-    //         if (err) throw err
-    //     });
-    // })
 }
 
 const getPlayerDataForAllYears = async () => {
@@ -219,12 +180,56 @@ const getPlayerDataForAllYears = async () => {
     const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
     const allSeasons = await fetchDataFromNHLEWeb('season')
     for (let i = 0; i < allSeasons.length; i++) {
-        if (parseInt(allSeasons[i].toString().substring(0, 4), 10) <= 1964) continue;
         await addPlayerDataFromYearToDB(allRegularSeasonAndPlayoffGames, allSeasons[i])
     }
 }
 
-await getPlayerDataForAllYears();
+const normalizeString = (string) => {
+    return string.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+}
+
+const getAllPlayers = async () => {
+    return await fetchDataFromNHLE('en/players')
+}
+
+const getAllEntriesFromDB = async () => {
+    const rows = await db.all("SELECT * FROM players");
+    return rows.map(d => ({ playerid: d.playerid, gameids: JSON.parse(d.gameids) }))
+}
+
+const getAllGamesFromPlayer = async (playerid) => {
+    // Check if playerid exists
+    const row = await db.get("SELECT gameids FROM players WHERE playerid = ?", [playerid], (err) => {
+        if (err) {
+            console.error(err.message);
+            return;
+        }
+    })
+    return JSON.parse(row.gameids)
+}
+
+const getSharedTeams = async (...playersids) => {
+    let playersgames = []
+    for (let i = 0; i < playersids.length; i++) {
+        const playergames = await getAllGamesFromPlayer(playersids[i])
+        playersgames.push(playergames)
+    }
+    const commonGames = _.intersection(...playersgames)
+    if (!commonGames.length) return []
+    const commonTeams = _.uniq(commonGames.map(game => game.substring(0, 4) + '_' + game.substring(game.length - 3)))
+    return commonTeams
+}
+
+const getTeammatesOfPlayer = async (playerid) => {
+    const allPlayers = await getAllEntriesFromDB()
+    const playerGames = await getAllGamesFromPlayer(playerid)
+    const teammates = allPlayers.filter(d => !!(_.intersection(d.gameids, playerGames).length))
+    return teammates
+}
+
+// await getPlayerDataForAllYears();
+console.log(await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid)))
+console.log(await getTeammatesOfPlayer('8478402').then(d => d.map(dd => dd.playerid)))
 
 await db.close((err) => {
     if (err) {
