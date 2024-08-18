@@ -112,18 +112,12 @@ const getPlayersFromGame = async (gameID) => {
     }
 }
 
-const playersList = []
-
-const mainDataFetcher = async () => {
-    const allGamesRaw = await fetchDataFromNHLE('en/game')
-    const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
-    const coolGames1 = allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20222023 && new Date(game["gameDate"]).getTime() <= new Date(2022, 9, 20).getTime())
-    const coolGames = [...coolGames1, ...allRegularSeasonAndPlayoffGames.filter(game => game["season"] === 20232024 && new Date(game["gameDate"]).getTime() <= new Date(2023, 9, 20).getTime())]
+const addPlayerDataFromYearToDB = async (allGames, season) => {
+    await db.run('CREATE TABLE IF NOT EXISTS players (playerid TEXT PRIMARY KEY, gameids TEXT)')
+    const playersList = []
+    const coolGames = allGames.filter(game => game["season"] === season)
     for (let i = 0; i < coolGames.length; i++) {
         const { homePlayers, awayPlayers } = await getPlayersFromGame(coolGames[i].id)
-        // console.log('home:', homePlayers)
-        // console.log('away:', awayPlayers)
-        console.log(coolGames[i] ? coolGames[i]?.id : 'nope')
         homePlayers.concat(awayPlayers).forEach(player => {
             const foundPlayer = playersList.find(d => d.getPlayerId() === player.playerId)
             if (foundPlayer) {
@@ -136,35 +130,70 @@ const mainDataFetcher = async () => {
             }
         })
     }
-    await db.exec('CREATE TABLE IF NOT EXISTS players (playerid TEXT PRIMARY KEY, gameids TEXT)')
     for (let i = 0; i < playersList.length; i++) {
-        // TODO: don't set, need to append new gameids
-        const insertQuery = `
-            INSERT INTO players (playerid, gameids)
-            VALUES (?, ?)
-            ON CONFLICT(playerid)
-            DO UPDATE SET gameids = excluded.gameids;
-        `;
-        // https://stackoverflow.com/questions/1584480/insert-into-sqlite-with-variables-using-javascript/59930004#59930004
-        await db.run(insertQuery, [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())], function(err) {
+        const playerid = playersList[i].getPlayerId();
+        const gameids = playersList[i].getGames();
+
+        // Check if playerid exists
+        const row = await db.get("SELECT gameids FROM players WHERE playerid = ?", [playerid], (err) => {
             if (err) {
-                console.error('Error executing query:', err.message);
-            } else {
-                console.log(`Player with ID ${playersList[i].getPlayerId()} has been upserted/updated.`);
+                console.error(err.message);
+                db.run("ROLLBACK");
+                return;
             }
-        });
+        })
+
+        console.log('row: ', row)
+
+        const currentGameIdsArray = row ? JSON.parse(row.gameids) : [];
+        // unique union of new and existing gameids
+        const updatedGameIdsArray = Array.from(new Set([...currentGameIdsArray, ...gameids]));
+
+        const updatedGameIds = JSON.stringify(updatedGameIdsArray);
+
+        if (row) {
+            console.log('update existing row')
+            // Update existing row
+            await db.run("UPDATE players SET gameids = ? WHERE playerid = ?", [updatedGameIds, playerid], (err) => {
+                if (err) {
+                    console.error(err.message);
+                    db.run("ROLLBACK");
+                    return;
+                }
+            });
+        } else {
+            console.log('insert new row')
+            // Insert new row
+            await db.run("INSERT INTO players (playerid, gameids) VALUES (?, ?)", [playerid, updatedGameIds], (err) => {
+                if (err) {
+                    console.error(err.message);
+                    db.run("ROLLBACK");
+                    return;
+                }
+            });
+        }
+
+
+        // // TODO: don't set, need to append new gameids
+        // const insertQuery = `
+        //     INSERT INTO players (playerid, gameids)
+        //     VALUES (?, ?)
+        //     ON CONFLICT(playerid)
+        //     DO UPDATE SET gameids = excluded.gameids;
+        // `;
+        // // https://stackoverflow.com/questions/1584480/insert-into-sqlite-with-variables-using-javascript/59930004#59930004
+        // await db.run(insertQuery, [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())], function (err) {
+        //     if (err) {
+        //         console.error('Error executing query:', err.message);
+        //     } else {
+        //         console.log(`Player with ID ${playersList[i].getPlayerId()} has been upserted/updated.`);
+        //     }
+        // });
         // await db.run('INSERT INTO players(playerid, gameids) VALUES(:playerid, :gameids)', [playersList[i].getPlayerId(), JSON.stringify(playersList[i].getGames())])
     }
     // const coolResult = await db.all('SELECT * FROM players WHERE playerid = "8471675"')
     // console.log(coolResult.map(d => ({ playerid: d.playerid, gameids: JSON.parse(d.gameids) })))
     // console.log(coolResult.map(d => JSON.parse(d.gameids).length))
-    await db.close((err) => {
-        if (err) {
-            console.error('Error closing database connection:', err.message);
-        } else {
-            console.log('Database connection closed.');
-        }
-    });
 
 
     // fs.writeFile("./test.txt", "", { flag: 'w' }, function (err) {
@@ -185,5 +214,22 @@ const mainDataFetcher = async () => {
     // })
 }
 
+const getPlayerDataForAllYears = async () => {
+    const allGamesRaw = await fetchDataFromNHLE('en/game')
+    const allRegularSeasonAndPlayoffGames = allGamesRaw.filter(game => game['gameType'] === 2 || game['gameType'] === 3)
+    const allSeasons = await fetchDataFromNHLEWeb('season')
+    for (let i = 0; i < allSeasons.length; i++) {
+        if (parseInt(allSeasons[i].toString().substring(0, 4), 10) <= 1964) continue;
+        await addPlayerDataFromYearToDB(allRegularSeasonAndPlayoffGames, allSeasons[i])
+    }
+}
 
-mainDataFetcher()
+await getPlayerDataForAllYears();
+
+await db.close((err) => {
+    if (err) {
+        console.error('Error closing database connection:', err.message);
+    } else {
+        console.log('Database connection closed.');
+    }
+});
