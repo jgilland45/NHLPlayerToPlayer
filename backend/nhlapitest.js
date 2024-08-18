@@ -227,8 +227,48 @@ const getTeammatesOfPlayer = async (playerid) => {
     return teammates
 }
 
+// SO I RAN THIS AND IT GAVE BACK ONE SINGULAR ENTRY, SO ANY NHL PLAYER CAN BE LINKED TO ANY OTHER NHL PLAYER
+// DON'T RUN THIS AGAIN
+const getAllTeammateLines = async () => {
+    const allDbEntries = await getAllEntriesFromDB()
+    console.log('loaded!')
+    let allPossibilities = []
+    for (let i = 0; i < allDbEntries.length; i++) {
+        console.log('going through player', i + 1)
+        if (!allPossibilities.length) {
+            allPossibilities.push({ playerids: [allDbEntries[i].playerid], gameids: allDbEntries[i].gameids })
+        } else {
+            let foundMatch = false;
+            for (let j = 0; j < allPossibilities.length; j++) {
+                if (foundMatch) continue;
+                // if there is overlap
+                if (_.difference(allPossibilities[j].gameids, allDbEntries[i].gameids).length) {
+                    // console.log('found match:', allDbEntries[i].playerid)
+                    foundMatch = true;
+                    allPossibilities[j].gameids = _.union(allPossibilities[j].gameids, allDbEntries[i].gameids)
+                    allPossibilities[j].playerids.push(allDbEntries[i].playerid)
+                }
+            }
+            if (!foundMatch) {
+                // console.log('did not find match:', allDbEntries[i].playerid)
+                allPossibilities.push({ playerids: [allDbEntries[i].playerid], gameids: allDbEntries[i].gameids })
+            }
+        }
+    }
+    return allPossibilities
+}
+
 // await getPlayerDataForAllYears();
-console.log(await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid)))
+const mbTeammates = await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid));
+const mbTeammatesWithTeams = await Promise.all(mbTeammates.map(async (d) => {
+    const commonTeam = await getSharedTeams('8483158', d)
+    return ({
+        playerid: d,
+        commonteam: commonTeam,
+    })
+}))
+console.log(mbTeammatesWithTeams)
+// console.log(await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid)))
 console.log(await getTeammatesOfPlayer('8478402').then(d => d.map(dd => dd.playerid)))
 
 await db.close((err) => {
