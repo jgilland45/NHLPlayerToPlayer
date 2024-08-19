@@ -16,6 +16,8 @@ Backend:
     - https://assets.nhle.com/mugs/nhl/{yearCode}/{teamCode}/{playerId}.png to get player headshot for a certain year and team
     - https://api-web.nhle.com/v1/player/{playerId}/landing
         - gives all the data I think I'll ever need for a player
+    - https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=100000&q={query}
+        - eg. use 'connor%20mcdavid to find the one I'm looking for
 - idea: create new DB using NHL API
     - first check DB, get all game IDs, and only get gamecenter report for those not already in DB
     - create entry in DB for the game and each player with team

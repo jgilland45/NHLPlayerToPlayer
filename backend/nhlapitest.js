@@ -1,8 +1,14 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import _ from 'lodash-es';
+import * as readline from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
 
 let db;
+let rl = readline.createInterface({
+    input,
+    output,
+});
 
 // this is a top-level await 
 await (async () => {
@@ -17,6 +23,7 @@ const API_NHLE = 'https://api.nhle.com/stats/rest'
 const API_NHLE_WEB = 'https://api-web.nhle.com/v1'
 const API_NHL_ASSETS_MUG = 'https://assets.nhle.com/mugs/nhl'
 const API_NHL_ASSETS_LOGO = 'https://assets.nhle.com/logos/nhl/svg'
+const API_PLAYER_SEARCH = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=100000&q='
 
 class Player {
     games = []
@@ -71,6 +78,16 @@ const fetchDataFromNHLAssetsLogo = async (endpoint) => {
     try {
         const response = await (await fetch(`${API_NHL_ASSETS_LOGO}/${endpoint}`))
         console.log('Getting data from', `${API_NHL_ASSETS_LOGO}/${endpoint}`)
+        return response
+    } catch (err) {
+        console.log(err)
+    }
+}
+
+const fetchDataFromNHLPlayerSeach = async (query) => {
+    try {
+        const response = await ((await fetch(`${API_PLAYER_SEARCH}${query}`)).json())
+        console.log('Getting data from', `${API_PLAYER_SEARCH}${query}`)
         return response
     } catch (err) {
         console.log(err)
@@ -185,7 +202,7 @@ const getPlayerDataForAllYears = async () => {
 }
 
 const normalizeString = (string) => {
-    return string.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    return string.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(" ", "%20").toLowerCase()
 }
 
 const getAllPlayers = async () => {
@@ -258,6 +275,38 @@ const getAllTeammateLines = async () => {
     return allPossibilities
 }
 
+const askPlayerQuestion = async (foundPlayers) => {
+    const answer = await rl.question(`Which player is the one you are looking for? (provide number from 1 to ${foundPlayers.length}): ${JSON.stringify(foundPlayers.map((d, i) => ({ option: i + 1, position: d.positionCode, team: d.teamAbbrev })))}\n`)
+    console.log(`You chose: ${answer}`);
+    if (_.isNaN(parseInt(answer, 10))) {
+        console.log('That is not a number! Please try again')
+        return (await askPlayerQuestion(foundPlayers))
+    }
+    if (parseInt(answer, 10) < 1 || parseInt(answer, 10) > foundPlayers.length) {
+        console.log('Number not in range! Please try again')
+        return (await askPlayerQuestion(foundPlayers))
+    }
+    return answer
+}
+
+const getIdFromPlayerName = async (playername) => {
+    const playerSearchResults = await fetchDataFromNHLPlayerSeach(normalizeString(playername))
+    const foundPlayers = playerSearchResults.filter(d => normalizeString(d.name) === normalizeString(playername))
+    if (!foundPlayers.length) {
+        console.log('no found players')
+        return ''
+    }
+    if (foundPlayers.length === 1) {
+        console.log('found one player!')
+        return foundPlayers[0].playerId
+    }
+    // multiple players with the same name
+    const answer = await askPlayerQuestion(foundPlayers)
+
+    rl.close();
+    return foundPlayers[parseInt(answer - 1, 10)].playerId;
+}
+
 // await getPlayerDataForAllYears();
 const mbTeammates = await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid));
 const mbTeammatesWithTeams = await Promise.all(mbTeammates.map(async (d) => {
@@ -270,7 +319,12 @@ const mbTeammatesWithTeams = await Promise.all(mbTeammates.map(async (d) => {
 console.log(mbTeammatesWithTeams)
 // console.log(await getTeammatesOfPlayer('8483158').then(d => d.map(dd => dd.playerid)))
 console.log(await getTeammatesOfPlayer('8478402').then(d => d.map(dd => dd.playerid)))
+// console.log('Sebastian Aho (car):', await getIdFromPlayerName('Sebastian Aho'))
+// console.log('connor mcdavid:', await getIdFromPlayerName('connor mcdavid'))
 
+console.log(await getSharedTeams(await getIdFromPlayerName('anze kopitar'), await getIdFromPlayerName('sean o\'donnell')))
+
+await rl.close();
 await db.close((err) => {
     if (err) {
         console.error('Error closing database connection:', err.message);
