@@ -29,3 +29,7 @@ Backend:
             - might not need?
         - try playing with DB data in JS
             - create a union-find structure to find all teammate links in NHL history
+
+- new plan 12/29/2024
+    - filling out information from NHL API - still need to complete
+    - many years missing still
