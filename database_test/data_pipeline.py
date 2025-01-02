@@ -20,31 +20,36 @@ def get_name_from_playerid(playerid):
 
 def get_players_in_game(gameid):
     game_url = f'https://api-web.nhle.com/v1/gamecenter/{gameid}/boxscore'
-    response = requests.get(game_url)
-    data = response.json()
-    home_team = data['playerByGameStats']['homeTeam']
-    home_team_tricode = data['homeTeam']['abbrev']
-    away_team = data['playerByGameStats']['awayTeam']
-    away_team_tricode = data['awayTeam']['abbrev']
-    season = data['season']
-    positions = ['forwards', 'defense', 'goalies']
-    player_game_info = []
-    for position in positions:
-        players = home_team[position]
-        for player in players:
-            player_game_info.append({
-                'playerid': player['playerId'],
-                'gameid': gameid,
-                'teamid': home_team_tricode + str(season),
-                })
-        players = away_team[position]
-        for player in players:
-            player_game_info.append({
-                'playerid': player['playerId'],
-                'gameid': gameid,
-                'teamid': away_team_tricode + str(season),
-                })
-    return player_game_info
+
+    try:
+        response = requests.get(game_url)
+        data = response.json()
+        home_team = data['playerByGameStats']['homeTeam']
+        home_team_tricode = data['homeTeam']['abbrev']
+        away_team = data['playerByGameStats']['awayTeam']
+        away_team_tricode = data['awayTeam']['abbrev']
+        season = data['season']
+        positions = ['forwards', 'defense', 'goalies']
+        player_game_info = []
+        for position in positions:
+            players = home_team[position]
+            for player in players:
+                player_game_info.append({
+                    'playerid': player['playerId'],
+                    'gameid': gameid,
+                    'teamid': home_team_tricode + str(season),
+                    })
+            players = away_team[position]
+            for player in players:
+                player_game_info.append({
+                    'playerid': player['playerId'],
+                    'gameid': gameid,
+                    'teamid': away_team_tricode + str(season),
+                    })
+        return player_game_info
+    except:
+        print(f"skipped game {gameid}")
+        return []
 def get_all_gameids():
     games_URL = 'https://api.nhle.com/stats/rest/en/game'
     response = requests.get(games_URL)
@@ -120,8 +125,8 @@ def run():
     gameids = db_getters.get_all_games()
     
     for gameid in gameids:
-        if int(gameid[0]) >= 1938020029 and int(gameid[0]) < 1946020001:
-            insert_info_from_game(int(gameid[0]))        
+        if int(gameid) >= 2021010082 and int(gameid) < 2026010082:
+            insert_info_from_game(int(gameid))
 
 if __name__ == "__main__":
     run()

@@ -35,6 +35,20 @@ def get_random_playerid():
     randplayer = create_tables.cursor.fetchone()
     return randplayer[0]
 
+def get_random_playerid_from_team_and_years(tricode, loweryear, upperyear):
+    true_tricode = tricode + "%"
+    create_tables.cursor.execute("""
+        SELECT playerid
+        FROM Player_Game
+        WHERE LOWER(teamid) LIKE ?
+        AND CAST(SUBSTR(teamid, LENGTH(teamid) - 7) AS INTEGER) >= ?
+        AND CAST(SUBSTR(teamid, LENGTH(teamid) - 7) AS INTEGER) <= ?
+        ORDER BY RANDOM()
+        LIMIT 1;
+    """, (true_tricode, loweryear, upperyear,))
+    randplayer = create_tables.cursor.fetchone()
+    return randplayer[0]
+
 def get_all_teammates_of_player(playerid):
     create_tables.cursor.execute("""
         SELECT DISTINCT(pg2.playerid)
