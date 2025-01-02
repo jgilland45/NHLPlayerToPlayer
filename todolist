@@ -33,3 +33,4 @@ Backend:
 - new plan 12/29/2024
     - filling out information from NHL API - still need to complete
     - many years missing still
+    - check that all of the players in Player_Info that have played NHL games have their correct names

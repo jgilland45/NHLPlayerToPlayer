@@ -1,3 +1,4 @@
+import time
 import create_tables
 import sqlite3
 
@@ -30,14 +31,21 @@ def insert_player_game(playerid, gameid, teamid):
         """, (playerid, gameid, teamid, ))
     except sqlite3.IntegrityError:
         insert_teamid(teamid)
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_player_game(playerid, gameid, teamid)
     create_tables.cursor.connection.commit()
 
 def insert_player_info(playerid, name):
-    create_tables.cursor.execute("""
-        INSERT OR REPLACE INTO Player_Info (playerid, name)
-        VALUES (?, ?);
-    """, (playerid, name, ))
-    create_tables.cursor.connection.commit()
+    try:
+        create_tables.cursor.execute("""
+            INSERT OR REPLACE INTO Player_Info (playerid, name)
+            VALUES (?, ?);
+        """, (playerid, name, ))
+        create_tables.cursor.connection.commit()
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_player_info(playerid, name)
 
 def insert_player_team(playerid, teamid):
     try:
@@ -47,4 +55,7 @@ def insert_player_team(playerid, teamid):
         """, (playerid, teamid, ))
     except sqlite3.IntegrityError as e:
         insert_teamid(teamid)
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_player_team(playerid, teamid)
     create_tables.cursor.connection.commit()
