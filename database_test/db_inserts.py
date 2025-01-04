@@ -3,24 +3,36 @@ import create_tables
 import sqlite3
 
 def insert_playerid(playerid):
-    create_tables.cursor.execute("""
-        INSERT OR REPLACE INTO Players (playerid)
-        VALUES (?);
-    """, (playerid, ))
+    try:
+        create_tables.cursor.execute("""
+            INSERT OR REPLACE INTO Players (playerid)
+            VALUES (?);
+        """, (playerid, ))
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_playerid(playerid)
     create_tables.cursor.connection.commit()
 
 def insert_teamid(teamid):
-    create_tables.cursor.execute("""
-        INSERT OR REPLACE INTO Teams (teamid)
-        VALUES (?);
-    """, (teamid, ))
+    try:
+        create_tables.cursor.execute("""
+            INSERT OR REPLACE INTO Teams (teamid)
+            VALUES (?);
+        """, (teamid, ))
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_teamid(teamid)
     create_tables.cursor.connection.commit()
 
 def insert_gameid(gameid):
-    create_tables.cursor.execute("""
-        INSERT OR REPLACE INTO Games (gameid)
-        VALUES (?);
-    """, (gameid, ))
+    try:
+        create_tables.cursor.execute("""
+            INSERT OR REPLACE INTO Games (gameid)
+            VALUES (?);
+        """, (gameid, ))
+    except sqlite3.OperationalError:
+        time.sleep(1)
+        insert_gameid(gameid)
     create_tables.cursor.connection.commit()
 
 def insert_player_game(playerid, gameid, teamid):

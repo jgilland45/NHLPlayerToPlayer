@@ -34,3 +34,8 @@ Backend:
     - filling out information from NHL API - still need to complete
     - many years missing still
     - check that all of the players in Player_Info that have played NHL games have their correct names
+    - for test_game
+        - make options for what kind of games to include (just reg or playoff, or any type of game)
+        - make easy way to customize parts of the game (valid teams, valid years, # and kinds of powerups, etc)
+        - add in actual timer
+        - add in fuzzy search for player names (possibly leave this for GUI app)

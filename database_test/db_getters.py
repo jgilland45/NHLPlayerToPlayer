@@ -49,6 +49,30 @@ def get_random_playerid_from_team_and_years(tricode, loweryear, upperyear):
     randplayer = create_tables.cursor.fetchone()
     return randplayer[0]
 
+def get_random_playerid_from_team(tricode):
+    true_tricode = tricode + "%"
+    create_tables.cursor.execute("""
+        SELECT playerid
+        FROM Player_Game
+        WHERE LOWER(teamid) LIKE ?
+        ORDER BY RANDOM()
+        LIMIT 1;
+    """, (true_tricode,))
+    randplayer = create_tables.cursor.fetchone()
+    return randplayer[0]
+
+def get_random_playerid_from_years(loweryear, upperyear):
+    create_tables.cursor.execute("""
+        SELECT playerid
+        FROM Player_Game
+        WHERE CAST(SUBSTR(teamid, LENGTH(teamid) - 7) AS INTEGER) >= ?
+        AND CAST(SUBSTR(teamid, LENGTH(teamid) - 7) AS INTEGER) <= ?
+        ORDER BY RANDOM()
+        LIMIT 1;
+    """, (loweryear, upperyear,))
+    randplayer = create_tables.cursor.fetchone()
+    return randplayer[0]
+
 def get_all_teammates_of_player(playerid):
     create_tables.cursor.execute("""
         SELECT DISTINCT(pg2.playerid)
@@ -90,3 +114,11 @@ def get_name_from_playerid(playerid):
     name = create_tables.cursor.fetchone()
     return name[0]
 
+def get_teams_from_playerid(playerid):
+    create_tables.cursor.execute("""
+        SELECT teamid
+        FROM Player_Team pi
+        WHERE playerid = ?;
+    """, (playerid, ))
+    teams = create_tables.cursor.fetchall()
+    return [x[0] for x in list(teams)]

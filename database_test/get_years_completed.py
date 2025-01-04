@@ -6,13 +6,29 @@ def get_is_year_complete(year):
     create_tables.cursor.execute("""
         SELECT count(distinct(gameid))
         FROM Player_Game pg
-        WHERE gameid like ?;
+        WHERE gameid like ?
+        AND gameid not like "____01%"
+        AND gameid not like "____04%"
+        AND gameid not like "____05%"
+        AND gameid not like "____06%"
+        AND gameid not like "____07%"
+        AND gameid not like "____08%"
+        AND gameid not like "____09%"
+        AND gameid not like "____10%";
     """, (year_tag, ))
     num_games_tracked = create_tables.cursor.fetchone()
     create_tables.cursor.execute("""
         SELECT count(distinct(gameid))
         FROM Games g
-        WHERE gameid like ?;
+        WHERE gameid like ?
+        AND gameid not like "____01%"
+        AND gameid not like "____04%"
+        AND gameid not like "____05%"
+        AND gameid not like "____06%"
+        AND gameid not like "____07%"
+        AND gameid not like "____08%"
+        AND gameid not like "____09%"
+        AND gameid not like "____10%";
     """, (year_tag, ))
     num_games = create_tables.cursor.fetchone()
     return num_games_tracked[0] == num_games[0]
