@@ -125,7 +125,7 @@ def run():
     gameids = db_getters.get_all_games()
     
     for gameid in gameids:
-        if int(gameid) >= 2018021243 and int(gameid) < 2019000000:
+        if int(gameid) >= 2006020088 and int(gameid) < 2006020089:
             insert_info_from_game(int(gameid))
 
 if __name__ == "__main__":
