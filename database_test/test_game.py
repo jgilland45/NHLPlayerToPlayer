@@ -1,6 +1,7 @@
 import create_tables
 import db_getters
 from enum import Enum
+import time
 
 class GameType(Enum):
     SINGLE = 1
@@ -22,7 +23,6 @@ class Player:
         return self.time
     def get_listteam(self):
         return self.listteam
-
 
 TEAM_USE_LIMIT = 3
 
@@ -76,21 +76,25 @@ def handle_player_guess(current_left_player_teammates, current_left_player, lock
             print("Not a teammate! Guess again!")
         return current_left_player
 
-def battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player):
+def battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player, time_start, duration):
     turn_text = f"""
     Please type a teammate of {db_getters.get_name_from_playerid(current_left_player)} OR use one of the following powerups: {'time ' if player.get_time() else ''}{'list ' if player.get_listteam() else ''}{'skip ' if player.get_skip() else ''}
+    You have {duration - (time.time() - time_start)}s left.
     """
     choice = input(turn_text)
+    if time.time() - time_start > duration:
+        print("Out of time!")
+        return -1, []
     if choice.lower() == 'time':
         player.use_time()
         print("DOING TIME EXTEND")
-        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player)
+        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player, time_start, duration + 10)
         return current_left_player, current_left_player_teammates
     elif choice.lower() == 'list':
         player.use_listteam()
         teams_of_player = db_getters.get_teams_from_playerid(current_left_player)
         print(f"{db_getters.get_name_from_playerid(current_left_player)} has played for the following teams: {teams_of_player}\n")
-        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player)
+        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player, time_start, duration)
         return current_left_player, current_left_player_teammates
     elif choice.lower() == 'skip':
         player.use_skip()
@@ -105,7 +109,7 @@ def battle_turn_options(current_left_player_teammates, current_left_player, lock
         print(f"guessed teams: {guessed_teams}")
         if currentLeftPlayer == current_left_player:
             print("Not a valid teammate or option. Try again!")
-            current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player)
+            current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player, time_start, duration)
             return current_left_player, current_left_player_teammates
         current_left_player_teammates = db_getters.get_all_teammates_of_player(currentLeftPlayer)
         return currentLeftPlayer, current_left_player_teammates
@@ -129,13 +133,15 @@ def battle_game(settings):
     player2 = Player()
     guessed_teams = {}
     locked_players = {}
-    both_alive = True
     current_left_player = start_playerid
     locked_players[current_left_player] = 1
     current_left_player_teammates = db_getters.get_all_teammates_of_player(current_left_player)
-    while both_alive:
+    while True:
         print(f"Player {'1' if player1_turn else '2'}'s turn.\n")
-        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player1 if player1_turn else player2)
+        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player1 if player1_turn else player2, time.time(), 20)
+        if current_left_player == -1:
+            print(f"Player {'1' if player1_turn else '2'} ran out of time. Player {'2' if player1_turn else '1'} wins!!")
+            break
         player1_turn = not player1_turn
 
 def single_player_connect_game(settings):
