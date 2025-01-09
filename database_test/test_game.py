@@ -49,32 +49,32 @@ def make_teammate_guess(currentLeftPlayer, inputted_player=None):
     return found_player
 
 def handle_player_guess(current_left_player_teammates, current_left_player, locked_players, guessed_teams, inputted_player):
-        teammateGuess = make_teammate_guess(current_left_player, inputted_player)
-        if (teammateGuess in current_left_player_teammates):
+    teammateGuess = make_teammate_guess(current_left_player, inputted_player)
+    if (teammateGuess in current_left_player_teammates):
+        try:
+            if locked_players[teammateGuess]:
+                print(f"Cannot use {db_getters.get_name_from_playerid(teammateGuess)} since they were already used")
+                return current_left_player
+        except:
+            pass
+        relatedTeams = db_getters.get_common_teams(teammateGuess, current_left_player)
+        for relatedTeam in relatedTeams:
             try:
-                if locked_players[teammateGuess]:
-                    print(f"Cannot use {db_getters.get_name_from_playerid(teammateGuess)} since they were already used")
-                    return current_left_player
+                guessed_teams[relatedTeam]+=1
             except:
-                pass
-            relatedTeams = db_getters.get_common_teams(teammateGuess, current_left_player)
-            for relatedTeam in relatedTeams:
-                try:
-                    guessed_teams[relatedTeam]+=1
-                except:
-                    guessed_teams[relatedTeam] = 1
-                if guessed_teams[relatedTeam] > TEAM_USE_LIMIT:
-                    print(f"Cannot use this player - over team limit for team {relatedTeam}")
-                    return current_left_player
-            print("Yes! They both played for:")
-            for relatedTeam in relatedTeams:
-                print(relatedTeam)
-            current_left_player = teammateGuess
-            locked_players[current_left_player] = 1
-            return current_left_player
-        else:
-            print("Not a teammate! Guess again!")
+                guessed_teams[relatedTeam] = 1
+            if guessed_teams[relatedTeam] > TEAM_USE_LIMIT:
+                print(f"Cannot use this player - over team limit for team {relatedTeam}")
+                return current_left_player
+        print("Yes! They both played for:")
+        for relatedTeam in relatedTeams:
+            print(relatedTeam)
+        current_left_player = teammateGuess
+        locked_players[current_left_player] = 1
         return current_left_player
+    else:
+        print("Not a teammate! Guess again!")
+    return current_left_player
 
 def battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player, time_start, duration):
     turn_text = f"""
