@@ -24,6 +24,16 @@ def get_all_games():
     gameids = create_tables.cursor.fetchall()
     return [x[0] for x in list(gameids)]
 
+def get_year_of_most_recent_game_played():
+    create_tables.cursor.execute("""
+        SELECT distinct(gameid)
+        FROM Player_Game
+        ORDER BY gameid DESC
+        LIMIT 1;
+    """)
+    gameid = create_tables.cursor.fetchone()
+    return gameid[0][0:4]
+
 # https://stackoverflow.com/questions/2279706/select-random-row-from-a-sqlite-table
 def get_random_playerid():
     create_tables.cursor.execute("""

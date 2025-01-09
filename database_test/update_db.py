@@ -50,6 +50,7 @@ def get_players_in_game(gameid):
     except:
         print(f"skipped game {gameid}")
         return []
+
 def get_all_gameids():
     games_URL = 'https://api.nhle.com/stats/rest/en/game'
     response = requests.get(games_URL)
@@ -57,39 +58,8 @@ def get_all_gameids():
     gameids = []
     for datum in data:
         gameid = datum['id']
-        gameids.append(gameid)
+        gameids.append(str(gameid))
     return gameids
-
-def get_teams(tricodes):
-    teams_list = []
-    for tricode in tricodes:
-        team_stats_URL = 'https://api-web.nhle.com/v1/club-stats-season/' + tricode
-        response = requests.get(team_stats_URL)
-        data = response.json()
-        if len(data) == 0:
-            continue
-        team_years = [x['season'] for x in data]
-        for year in team_years:
-            teams_list.append(tricode + str(year))
-    return teams_list
-
-def get_all_team_tricodes():
-    teams_URL = 'https://api.nhle.com/stats/rest/en/team'
-    response = requests.get(teams_URL)
-    data = response.json()['data']
-    tricodes_list = []
-    for tricode in data:
-        tricodes_list.append(tricode['triCode'])
-    return tricodes_list
-
-def get_all_years():
-    years_URL = 'https://api-web.nhle.com/v1/season'
-    response = requests.get(years_URL)
-    data = response.json()
-    years_list = []
-    for year in data:
-        years_list.append(year)
-    return years_list
 
 def insert_info_from_game(gameid):
     players = get_players_in_game(gameid)
@@ -111,21 +81,14 @@ def insert_info_from_game(gameid):
 def run():
     dbpath = "testdb.db"
     create_tables.connect(dbpath)
-    # create_tables.create_tables()
 
-    # tricodes = get_all_team_tricodes()
-    # teams = get_teams(tricodes)
-    # for team in teams:
-    #     db_inserts.insert_teamid(team)
+    all_gameids = get_all_gameids()
 
-    # gameids = get_all_gameids()
-    # for gameid in gameids:
-    #     db_inserts.insert_gameid(gameid)
-
-    gameids = db_getters.get_all_games()
+    # get most recent year since postponed games use same old gameid
+    most_recent_game_played_year = db_getters.get_year_of_most_recent_game_played()
     
-    for gameid in gameids:
-        if int(gameid) >= 2006020088 and int(gameid) < 2006020089:
+    for gameid in all_gameids:
+        if gameid >= (int(most_recent_game_played_year)*1000000):
             insert_info_from_game(int(gameid))
 
 if __name__ == "__main__":
