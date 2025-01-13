@@ -1,17 +1,17 @@
 import { fn } from '@storybook/test';
 import type { Meta, StoryObj } from '@storybook/vue3';
 
-import TeamConnections from '@/components/TeamConnections.vue';
+import NoLinkToPlayer from '@/components/NoLinkToPlayer.vue';
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories
 const meta = {
-  title: 'Components/TeamConnections',
-  component: TeamConnections,
+  title: 'Components/NoLinkToPlayer',
+  component: NoLinkToPlayer,
   // This component will have an automatically generated docsPage entry: https://storybook.js.org/docs/writing-docs/autodocs
   tags: ['autodocs'],
   args: {
   },
-} satisfies Meta<typeof TeamConnections>;
+} satisfies Meta<typeof NoLinkToPlayer>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -22,15 +22,6 @@ type Story = StoryObj<typeof meta>;
  */
 export const Primary: Story = {
   args: {
-    teamName: "Edmonton Oilers 2024-2025",
-    teamLogoURL: "https://assets.nhle.com/logos/nhl/svg/EDM_light.svg",
-    numStrikes: 1,
-  },
-};
-
-export const NoLogo: Story = {
-  args: {
-    teamName: "Edmonton Oilers 2024-2025",
-    numStrikes: 0,
+    playerName: "Connor McDavid",
   },
 };

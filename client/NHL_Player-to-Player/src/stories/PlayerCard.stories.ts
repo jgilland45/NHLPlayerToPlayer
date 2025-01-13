@@ -5,7 +5,7 @@ import PlayerCard from '@/components/PlayerCard.vue';
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories
 const meta = {
-  title: 'Example/PlayerCard',
+  title: 'Components/PlayerCard',
   component: PlayerCard,
   // This component will have an automatically generated docsPage entry: https://storybook.js.org/docs/writing-docs/autodocs
   tags: ['autodocs'],

@@ -40,7 +40,7 @@ const imageLoadError = (e: any) => {
   
 <style scoped lang="postcss">
 .team-connections-container {
-    @apply flex flex-row flex-auto justify-start items-center w-full border-2 border-solid border-black gap-1;
+    @apply flex flex-row flex-auto justify-start items-center w-full border-2 border-solid border-black gap-1 h-[30px];
     .link-icon {
         @apply flex items-center justify-center w-[30px] min-w-[25px];
     }
