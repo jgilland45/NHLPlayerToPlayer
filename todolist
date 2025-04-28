@@ -37,3 +37,6 @@ Backend:
         - make easy way to customize parts of the game (valid teams, valid years, # and kinds of powerups, etc)
         - add in actual timer
         - add in fuzzy search for player names (possibly leave this for GUI app)
+    - for Vue frontend
+        - create a python API to access data from the Vue app (use flask or django?)
+        - test out how fuzzy search can work
