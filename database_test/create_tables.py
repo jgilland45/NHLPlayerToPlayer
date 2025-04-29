@@ -16,7 +16,7 @@ def connect(path):
     global connection, cursor, dbpath, user
     if connection is None:
         dbpath = path
-        connection = sqlite3.connect(path)
+        connection = sqlite3.connect(path, check_same_thread=False)
         cursor = connection.cursor()
         cursor.execute(" PRAGMA foreign_keys=ON; ")
         # uncomment below for good debugging of query statements

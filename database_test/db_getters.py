@@ -1,6 +1,17 @@
 import create_tables
+import requests
+
+DEFAULT_IMAGE_URL = "https://assets.nhle.com/mugs/nhl/default-skater.png"
 
 def get_all_players():
+    create_tables.cursor.execute("""
+        SELECT playerid, name
+        FROM Player_Info;
+    """)
+    players = create_tables.cursor.fetchall()
+    return [{"playerid": row[0], "name": row[1]} for row in players]
+
+def get_all_playerids():
     create_tables.cursor.execute("""
         SELECT playerid
         FROM Players;
@@ -159,3 +170,47 @@ def get_teams_from_playerid(playerid):
     """, (playerid, ))
     teams = create_tables.cursor.fetchall()
     return [x[0] for x in list(teams)]
+
+def get_player_image_url(playerid: int) -> str:
+    # Get all teamids for the player
+    create_tables.cursor.execute("""
+        SELECT teamid
+        FROM Player_Team
+        WHERE playerid = ?
+    """, (playerid,))
+    teams = create_tables.cursor.fetchall()
+
+    if not teams:
+        return DEFAULT_IMAGE_URL
+
+    # Extract (team_tricode, season) and find most recent
+    most_recent_team = None
+    most_recent_season = 0
+
+    for (teamid,) in teams:
+        tricode = teamid[:3]
+        try:
+            season = int(teamid[-8:])  # extract 8 digits and convert
+        except ValueError:
+            continue  # skip bad data
+
+        if season > most_recent_season:
+            most_recent_season = season
+            most_recent_team = tricode
+
+    if not most_recent_team:
+        return DEFAULT_IMAGE_URL
+
+    # Build the image URL
+    season_str = str(most_recent_season)
+    url = f"https://assets.nhle.com/mugs/nhl/{season_str}/{most_recent_team}/{playerid}.png"
+
+    # Optionally: check if the URL exists
+    try:
+        response = requests.head(url, timeout=2)
+        if response.status_code == 404:
+            return DEFAULT_IMAGE_URL
+    except requests.RequestException:
+        return DEFAULT_IMAGE_URL
+
+    return url
