@@ -56,10 +56,6 @@ def get_player_name(playerid: int):
 def get_player_teams(playerid: int):
     return {"teams": db_getters.get_teams_from_playerid(playerid)}
 
-@app.get("/player/{playerid}/image")
-def get_player_image(playerid: int):
-    return {"image_url": db_getters.get_player_image_url(playerid)}
-
 @app.get("/player/{playerid}/teammates")
 def get_player_teams(playerid: int, gametype: str = "all"):
     if gametype == "all":
