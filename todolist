@@ -37,6 +37,10 @@ Backend:
         - make easy way to customize parts of the game (valid teams, valid years, # and kinds of powerups, etc)
         - add in actual timer
         - add in fuzzy search for player names (possibly leave this for GUI app)
-    - for Vue frontend
-        - create a python API to access data from the Vue app (use flask or django?)
-        - test out how fuzzy search can work
+
+- todo 04/30/2025
+    - create backend to run the brains of the different games
+        - could use rust? or just python would work to (use what is in `test_game.py`)
+    - use sockets to connect client to server
+    - current issues
+        - python backend REALLY slow for teammate guess

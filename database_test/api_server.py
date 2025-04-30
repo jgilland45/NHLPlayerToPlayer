@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import create_tables
 import db_getters
 
-# run using: `uvicorn api_server:app --reload`
+# run using: `uvicorn api_server:app --reload --host 0.0.0.0 --port 8000`
 
 app = FastAPI()
 
