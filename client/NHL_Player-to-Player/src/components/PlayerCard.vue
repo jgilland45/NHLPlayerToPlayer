@@ -28,7 +28,10 @@ const imageLoadError = (e: any) => {
   
 <style scoped lang="postcss">
 .player-card-container {
-    @apply flex flex-auto justify-start items-center flex-row w-full border-2 border-solid border-black gap-3;
+    @apply flex flex-auto justify-start items-center flex-row w-full border-2 border-solid border-black gap-3 cursor-pointer bg-gray-800 max-h-[120px];
+    &:hover {
+        @apply bg-gray-600;
+    }
     .photo-card {
         @apply flex w-[100px];
         .photo-card-img {
