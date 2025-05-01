@@ -165,7 +165,7 @@ const pollResponse = async () => {
   }
 
   check();
-}
+};
 
 const handleGameResponse = async (data: any) => {
   if (data.result === 'not_a_teammate') {
@@ -175,7 +175,12 @@ const handleGameResponse = async (data: any) => {
   } else if (data.result === 'over_limit') {
     message.value = '🚫 Team overuse limit reached.';
   } else if (data.result === 'correct') {
-    message.value = `🎉 You won in ${data.guesses} guesses!`;
+    let shortestPath = await getShortestPath();
+    let shortestPathPlayerObjects = []
+    for (let id of shortestPath) {
+      shortestPathPlayerObjects.push((await getPlayerObjectFromID(id)).name)
+    }
+    message.value = `🎉 You won in ${data.guesses} guesses! Shortest path: ${shortestPathPlayerObjects.join('->')}`;
     connections.value.push(await getTeamInfoFromCommonTeams(data.teams));
     gameOver.value = true;
     searchTerm.value = '';
@@ -189,7 +194,14 @@ const handleGameResponse = async (data: any) => {
   } else {
     message.value = '⚠️ Unknown response.';
   }
-}
+};
+
+const getShortestPath = async (): Promise<number[]> => {
+  const res = await axios.get(`${SERVER_URL}/shortest-path`, {
+    params: { player1: startPlayer.value?.playerid, player2: endPlayer.value?.playerid }
+  });
+  return res.data.path;
+};
 
 const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnection[]> => {
   let allTeamConnections: TeamConnection[] = [];
@@ -210,7 +222,7 @@ const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnecti
     });
   }
   return allTeamConnections;
-}
+};
 
 const getPlayerObjectFromID = async (playerid: number): Promise<Player> => {
   const response = await fetch(`${DB_URL}/player/${playerid}/name`);
@@ -278,6 +290,10 @@ onMounted(() => {
 
   .player_connections {
     @apply flex flex-col justify-center items-center h-full max-h-[800px] overflow-auto;
+
+    .connecting_players {
+      @apply overflow-auto;
+    }
   }
 
   .players_list {

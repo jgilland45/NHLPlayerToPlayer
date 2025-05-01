@@ -63,6 +63,7 @@ class StartRequest(BaseModel):
 class PlayAgainRequest(BaseModel):
     session_id: str
     play_again: bool
+    
 
 class GameType(Enum):
     SINGLE = 1
@@ -93,10 +94,14 @@ def start_game(req: StartRequest):
     session_id = req.session_id
     create_tables.connect(DB_PATH)
 
-    start_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
-    end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    # start_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    # end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    # while end_id == start_id:
+    #     end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    start_id = db_getters.get_random_playerid()
+    end_id = db_getters.get_random_playerid()
     while end_id == start_id:
-        end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+        end_id = db_getters.get_random_playerid()
 
     condition = threading.Condition()
 
@@ -166,6 +171,10 @@ def play_again(req: PlayAgainRequest):
 def graph_status():
     return graph_building_status
 
+@app.get("/shortest-path")
+def get_shortest_path(player1: int, player2: int):
+    return shortest_path(player1, player2)
+
 def get_all_teammates_of_player(playerid):
     global teammate_graph
     return list(teammate_graph.get(playerid, []))
@@ -178,12 +187,12 @@ def shortest_path(player1, player2):
     while queue:
         current, path = queue.popleft()
         if current == player2:
-            return path
+            return {"path": path}
         for neighbor in teammate_graph.get(current, []):
             if neighbor not in visited:
                 visited.add(neighbor)
                 queue.append((neighbor, path + [neighbor]))
-    return []
+    return {"path": []}
 
 def make_teammate_guess(currentLeftPlayer, inputted_player=None):
     if inputted_player is None:

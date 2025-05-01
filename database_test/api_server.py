@@ -86,4 +86,4 @@ def get_team_logo(team_tricode: str, year: int):
                     # Select the logo with the highest startSeason
                     latest_logo = max(valid_logos, key=lambda x: int(x.get("startSeason", 0)))
                     return {"logo": latest_logo.get("secureUrl"), "name": team.get("fullName")}
-    return None
+    return {"logo": 'https://www.nhl.com/assets/icons/fav/nhl/favicon-apple-touch-icon.png', "name": team_tricode + str(year)}
