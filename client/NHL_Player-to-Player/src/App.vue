@@ -6,5 +6,8 @@
 import { RouterView } from 'vue-router'
 </script>
 
-<style scoped lang="postcss">
+<style lang="postcss">
+#app {
+  @apply bg-gray-900 w-screen h-screen;
+}
 </style>

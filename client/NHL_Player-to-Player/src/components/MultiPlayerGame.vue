@@ -1,63 +1,76 @@
 <template>
-  <div
-    v-if="loading"
-    class="loading"
-  >
-    <p>Loading teammate graph... please wait!</p>
+  <div v-if="notLoggedIn">
+    <input
+      v-model="loginModel"
+      @keyup.enter="submitUsername"
+    />
   </div>
-  <div
-    class="game_container"
-    :class="{
-      is_loading: loading,
-    }"
-  >
-    <button @click="startGame">Start Game</button>
-    <div class="player_connections">
-      <PlayerCard
-        v-if="startPlayer"
-        :player-name="startPlayer.name"
-        :player-image-u-r-l="startPlayer.image_url"
+  <div v-else>
+    <div
+      v-if="loading"
+      class="loading"
+    >
+      <p>Loading teammate graph... please wait!</p>
+    </div>
+    <div
+      v-if="noLinkPopups.length"
+      class="no_link_to_player"
+    >
+      <NoLinkToPlayer
+        v-for="popup in noLinkPopups"
+        :key="popup.id"
+        :player-name="popup.player.name"
       />
-      <div class="connecting_players">
-        <div
-          v-for="(_, i) in connections"
-          class="single_player_connection"
-        >
-          <TeamConnectionBundle
-            v-if="connections.length > i"
-            :team-connections="connections[i]"
-          />
-          <PlayerCard
-            v-if="connectedPlayers.length > i"
-            :player-name="connectedPlayers[i].name"
-            :player-image-u-r-l="connectedPlayers[i].image_url"
-          />
+    </div>
+    <div
+      class="game_container"
+      :class="{
+        is_loading: loading,
+      }"
+    >
+      <button @click="startGame">Start Game</button>
+      <div class="player_connections">
+        <PlayerCard
+          v-if="startPlayer"
+          :player-name="startPlayer.name"
+          :player-image-u-r-l="startPlayer.image_url"
+        />
+        <div class="connecting_players">
+          <div
+            v-for="(_, i) in connections"
+            class="single_player_connection"
+          >
+            <TeamConnectionBundle
+              v-if="connections.length > i"
+              :team-connections="connections[i]"
+            />
+            <PlayerCard
+              v-if="connectedPlayers.length > i"
+              :player-name="connectedPlayers[i].name"
+              :player-image-u-r-l="connectedPlayers[i].image_url"
+            />
+          </div>
         </div>
       </div>
-      <PlayerCard
-        v-if="endPlayer"
-        :player-name="endPlayer.name"
-        :player-image-u-r-l="endPlayer.image_url"
-      />
+      <div class="players_list">
+        <InputSearch v-model="searchTerm" />
+        <PlayerCard
+          v-for="player in filteredResults"
+          v-if="filteredResultsLength <= DISPLAY_LIMIT"
+          :player-name="player.item.name"
+          :player-image-u-r-l="player.item.image_url"
+          @click="onPlayerChoiceClick(player.refIndex)"
+        />
+      </div>
+      <p>{{ message }}</p>
+      <p v-if="gameOver">🎉 Game Over!</p>
+      <button
+        v-if="gameOver"
+        @click="playAgain"
+      >
+        Play Again
+      </button>
     </div>
-    <div class="players_list">
-      <InputSearch v-model="searchTerm" />
-      <PlayerCard
-        v-for="player in filteredResults"
-        v-if="filteredResultsLength <= DISPLAY_LIMIT"
-        :player-name="player.item.name"
-        :player-image-u-r-l="player.item.image_url"
-        @click="onPlayerChoiceClick(player.refIndex)"
-      />
-    </div>
-    <p>{{ message }}</p>
-    <p v-if="gameOver">🎉 Game Over!</p>
-    <button
-      v-if="gameOver"
-      @click="playAgain"
-    >
-      Play Again
-    </button>
   </div>
 </template>
 
@@ -66,6 +79,7 @@ import { ref, computed, watch, watchEffect, onMounted } from 'vue';
 import InputSearch from './InputSearch.vue';
 import PlayerCard from './PlayerCard.vue';
 import TeamConnectionBundle, {type TeamConnection } from './TeamConnectionBundle.vue';
+import NoLinkToPlayer from './NoLinkToPlayer.vue';
 import { useFuse } from '@vueuse/integrations/useFuse';
 import axios from 'axios'
 
@@ -75,13 +89,21 @@ type Player = {
   image_url: string;
 }
 
+type PopupEntry = {
+  id: number;
+  player: Player;
+};
+
 const DISPLAY_LIMIT = 50;
 const DB_URL = "http://127.0.0.1:8000";
-const SERVER_URL = "http://127.0.0.1:8080";
+const SERVER_URL = "http://127.0.0.1:8080/multi-player";
 
 const sessionId = 'abc123';
+const notLoggedIn = ref<boolean>(true);
+const loginModel = ref<string>('');
+const clientId = ref<string>('');
+const isTurn = ref<boolean>(false);
 const startPlayer = ref<Player | null>(null);
-const endPlayer = ref<Player | null>(null);
 const message = ref<string>('');
 const polling = ref(false);
 const gameOver = ref<boolean>(false);
@@ -91,6 +113,8 @@ const searchTerm = ref<string>('');
 const players = ref<Player[]>([]);
 const connectedPlayers = ref<Player[]>([]);
 const connections = ref<TeamConnection[][]>([]);
+const noLinkPopups = ref<PopupEntry[]>([]);
+const popupCounter = ref<number>(0);
 
 const options = computed(() => ({
   fuseOptions: {
@@ -109,7 +133,6 @@ const startGame = async () => {
     session_id: sessionId
   });
   startPlayer.value = await getPlayerObjectFromID(res.data.start_player);
-  endPlayer.value = await getPlayerObjectFromID(res.data.end_player);
 }
 
 const onPlayerChoiceClick = async (idx: number) => {
@@ -132,7 +155,6 @@ const playAgain = async () => {
 
   // Replace old game state with new one
   startPlayer.value = await getPlayerObjectFromID(res.data.start_player);
-  endPlayer.value = await getPlayerObjectFromID(res.data.end_player);
   message.value = '';
   searchTerm.value = '';
   gameOver.value = false;
@@ -168,44 +190,52 @@ const pollResponse = async () => {
 };
 
 const handleGameResponse = async (data: any) => {
+  console.log("Handle data: ", data);
+  if (data === null) {
+    return;
+  }
   if (data.result === 'not_a_teammate') {
     message.value = '❌ Not a teammate!';
+    popupCounter.value++;
+    const id = popupCounter.value;
+    noLinkPopups.value.push({
+      id,
+      player: await getPlayerObjectFromID(data.player),
+    });
+    setTimeout(() => {
+      noLinkPopups.value = noLinkPopups.value.filter(p => p.id !== id);
+    }, 2500);
   } else if (data.result === 'already_used') {
     message.value = '⚠️ Already guessed that player.';
   } else if (data.result === 'over_limit') {
     message.value = '🚫 Team overuse limit reached.';
   } else if (data.result === 'correct') {
-    let shortestPath = await getShortestPath();
-    let shortestPathPlayerObjects = []
-    for (let id of shortestPath) {
-      shortestPathPlayerObjects.push((await getPlayerObjectFromID(id)).name)
-    }
-    message.value = `🎉 You won in ${data.guesses} guesses! Shortest path: ${shortestPathPlayerObjects.join('->')}`;
-    connections.value.push(await getTeamInfoFromCommonTeams(data.teams));
+    message.value = `🎉 You won in ${data.guesses} guesses!`;
+    connections.value.push(await getTeamInfoFromCommonTeams(data.teams, data.strikes));
     gameOver.value = true;
     searchTerm.value = '';
   } else if (data.result === 'continue') {
     message.value = `✅ Correct! They both played for: ${data.teams.join(', ')}`;
     connectedPlayers.value.push(await getPlayerObjectFromID(data.next_player));
-    connections.value.push(await getTeamInfoFromCommonTeams(data.teams));
+    connections.value.push(await getTeamInfoFromCommonTeams(data.teams, data.strikes));
     searchTerm.value = '';
   } else if (data.result === 'waiting') {
     message.value = 'Waiting for result...';
   } else {
     message.value = '⚠️ Unknown response.';
   }
+
+  if (data.start_player) {
+    console.log("set start player");
+    startPlayer.value = await getPlayerObjectFromID(data.start_player);
+  } else {
+    console.log("cannot set start player");
+  }
 };
 
-const getShortestPath = async (): Promise<number[]> => {
-  const res = await axios.get(`${SERVER_URL}/shortest-path`, {
-    params: { player1: startPlayer.value?.playerid, player2: endPlayer.value?.playerid }
-  });
-  return res.data.path;
-};
-
-const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnection[]> => {
+const getTeamInfoFromCommonTeams = async (teams: string[], strikes: number[]): Promise<TeamConnection[]> => {
   let allTeamConnections: TeamConnection[] = [];
-  for (let team of teams) {
+  for (let [i, team] of teams.entries()) {
     const tri_code = team.slice(0, 3);
     const years = team.slice(3, team.length);
     const res = await axios.get(`${DB_URL}/team/logo`, {
@@ -213,8 +243,7 @@ const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnecti
     });
     const logo = res.data.logo;
     const name = res.data.name + " " + years.slice(0, 4) + "-" + years.slice(4, years.length);
-    // TODO: update this using server data later
-    const numStrikes = 0;
+    const numStrikes = strikes[i];
     allTeamConnections.push({
       teamName: name,
       numStrikes,
@@ -270,6 +299,59 @@ const pollGraphStatus = async () => {
   }
 };
 
+const pollState = async () => {
+  const check = async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/check-state`, {
+        params: { session_id: sessionId }
+      });
+
+      if (res.data.result === 'waiting') {
+        setTimeout(check, 250)
+      } else {
+        if (res.data.result === clientId.value) {
+          console.log("It's your turn!");
+          isTurn.value = true;
+        } else {
+          console.log("It's NOT your turn!");
+          isTurn.value = false;
+        }
+        console.log("Current state: ", res.data.data);
+        handleGameResponse(res.data.data);
+        setTimeout(check, 2500)
+      }
+    } catch (err) {
+      console.error("Polling error", err);
+      polling.value = false;
+    }
+  }
+
+  check();
+};
+
+const submitUsername = () => {
+  clientId.value = loginModel.value;
+  notLoggedIn.value = false;
+  joinLobby();
+  pollState();
+};
+
+const joinLobby = async () => {
+  try {
+    const res = await axios.post(`${SERVER_URL}/join-lobby`, {
+      client: clientId.value,
+    });
+
+    if (res.data.status !== 'lobby_joined') {
+      setTimeout(joinLobby, 300); // try again in 300ms
+    } else {
+      console.log("Joined lobby!");
+    }
+  } catch (err) {
+    console.error("Join lobby failed:", err);
+    setTimeout(joinLobby, 1000);
+  }
+};
 
 onMounted(() => {
   fetchPlayers();
@@ -279,7 +361,10 @@ onMounted(() => {
 
 <style scoped lang="postcss">
 .loading {
-  @apply absolute left-1/2 top-1/2;
+  @apply absolute w-full h-full top-0 flex items-center justify-center text-white;
+}
+.no_link_to_player {
+  @apply absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-black;
 }
 .game_container {
   @apply flex flex-col flex-auto justify-center items-center w-full h-full;
@@ -289,7 +374,7 @@ onMounted(() => {
   }
 
   .player_connections {
-    @apply flex flex-col justify-center items-center h-full max-h-[800px] overflow-auto;
+    @apply flex flex-col justify-center items-center h-full max-h-[800px] overflow-auto text-white;
 
     .connecting_players {
       @apply overflow-auto;

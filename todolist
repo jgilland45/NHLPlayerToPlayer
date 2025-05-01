@@ -44,4 +44,6 @@ Backend:
         - instead of getting players through the client from the db directly, maybe get the player list from the server?
         - look into making socket-like connections, rather than having client polling server
         - fix `any` typing issues
-        - add in an optimal path after the game is over
+        - add in options for the game (game types (reg season, playoffs, other), limit start/end player by year/team/games played/etc)
+        - idea: add in player stat card (when you click on a player after a game, show their teams. when team is clicked, show all teammates from that team)
+        - multiplayer: find a way to connect to the same lobby/game

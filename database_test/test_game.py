@@ -50,12 +50,16 @@ def build_teammate_graph():
 TEAM_USE_LIMIT = 3
 DB_PATH = "testdb.db"
 sessions = {}
+clients = []
 teammate_graph = {}
 graph_building_status = {"status": "building"}
 
 class GuessRequest(BaseModel):
     session_id: str
     guess: int
+
+class JoinLobbyRequest(BaseModel):
+    client: str
 
 class StartRequest(BaseModel):
     session_id: str
@@ -65,9 +69,10 @@ class PlayAgainRequest(BaseModel):
     play_again: bool
     
 
-class GameType(Enum):
-    SINGLE = 1
-    BATTLE = 2
+class GameType(str, Enum):
+    SINGLE = 'single-player'
+    MULTI = 'multi-player'
+    BATTLE = 'battle'
 
 class Player:
     skips = 1
@@ -86,22 +91,30 @@ class Player:
     def get_listteam(self):
         return self.listteam
     
-@app.post("/start-game")
-def start_game(req: StartRequest):
+@app.post("/multi-player/join-lobby")
+def join_lobby(req: JoinLobbyRequest):
+    clients.append(req.client)
+    return {"status": "lobby_joined"}
+    
+@app.post("/{game_type}/start-game")
+def start_game(req: StartRequest, game_type: GameType):
     """
-    Initializes a new single-player connect game and stores session state.
+    Initializes a new game and stores session state.
     """
     session_id = req.session_id
     create_tables.connect(DB_PATH)
 
-    # start_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
-    # end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    start_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    if (game_type is GameType.SINGLE):
+        end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+        while end_id == start_id:
+            end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
+    else:
+        end_id = 0
+    # start_id = db_getters.get_random_playerid()
+    # end_id = db_getters.get_random_playerid()
     # while end_id == start_id:
-    #     end_id = db_getters.get_random_playerid_from_years(20152016, 20242025)
-    start_id = db_getters.get_random_playerid()
-    end_id = db_getters.get_random_playerid()
-    while end_id == start_id:
-        end_id = db_getters.get_random_playerid()
+    #     end_id = db_getters.get_random_playerid()
 
     condition = threading.Condition()
 
@@ -119,15 +132,18 @@ def start_game(req: StartRequest):
     }
 
     # Start the backend game loop in a separate thread
-    threading.Thread(target=single_player_connect_game, args=(session_id,), daemon=True).start()
+    if (game_type is GameType.SINGLE):
+        threading.Thread(target=single_player_connect_game, args=(session_id,), daemon=True).start()
+    elif (game_type is GameType.MULTI):
+        threading.Thread(target=battle_game, args=(session_id,clients,), daemon=True).start()
 
     return {
         "start_player": start_id,
         "end_player": end_id,
     }
 
-@app.post("/make-guess")
-def make_singleplayer_guess(req: GuessRequest):
+@app.post("/{game_type}/make-guess")
+def make_guess(req: GuessRequest):
     """
     Processes a single teammate guess for the given session.
     """
@@ -142,7 +158,7 @@ def make_singleplayer_guess(req: GuessRequest):
 
     return {"status": "guess_received"}
 
-@app.get("/check-response")
+@app.get("/{game_type}/check-response")
 def check_response(session_id: str):
     session = sessions.get(session_id)
     if not session:
@@ -155,7 +171,21 @@ def check_response(session_id: str):
 
     return {"result": "waiting"}
 
-@app.post("/play-again")
+@app.get("/multi-player/check-state")
+def check_state(session_id: str):
+    session = sessions.get(session_id)
+    if not session:
+        return {"error": "Session not found"}
+
+    if session["turn"] is not None:
+        return {
+            "result": session["turn"],
+            "data": check_response(session_id),
+        }
+
+    return {"result": "waiting"}
+
+@app.post("/{game_type}/play-again")
 def play_again(req: PlayAgainRequest):
     session = sessions.get(req.session_id)
     if not session:
@@ -167,11 +197,11 @@ def play_again(req: PlayAgainRequest):
     # Start a new game (reusing the /start-game logic)
     return start_game(StartRequest(session_id=req.session_id))
 
-@app.get("/graph-status")
+@app.get("/{game_type}/graph-status")
 def graph_status():
     return graph_building_status
 
-@app.get("/shortest-path")
+@app.get("/{game_type}/shortest-path")
 def get_shortest_path(player1: int, player2: int):
     return shortest_path(player1, player2)
 
@@ -282,34 +312,109 @@ def battle_turn_options(current_left_player_teammates, current_left_player, lock
         current_left_player_teammates = get_all_teammates_of_player(currentLeftPlayer)
         return currentLeftPlayer, current_left_player_teammates
 
-def battle_game(settings):
-    intro_text = """
-    Welcome!
-    This is a two-player game, where you will take turns naming teammates.
-    Each player only has one life, so if you cannot name a teammate in time, you lose!
-    Each player has powerups, including listing the teams a player played for, adding extra time, and skipping a guess.
-    Each team for a given year can only be used up to 3 times.
-    Have fun!
-    """
-    print(f"{intro_text}\n")
+def battle_game(session_id: str, clients: list[str]):
+    global teammate_graph
+    # Wait for graph to finish building
+    while graph_building_status["status"] != "ready":
+        time.sleep(0.1)
+    print(f"[{session_id}] Starting multi player game...")
     create_tables.connect(DB_PATH)
-    start_playerid = db_getters.get_random_playerid_from_years(20152016, 20242025)
-    player1_turn = True
-    print("Start player: " + db_getters.get_name_from_playerid(start_playerid))
-    player1 = Player()
-    player2 = Player()
-    guessed_teams = {}
-    locked_players = {}
+
+    game = sessions.get(session_id)
+    if not game:
+        print(f"[{session_id}] Session not found.")
+        return
+    start_playerid = game["start"]
+
+    print(f"[{session_id}] Start player: {db_getters.get_name_from_playerid(start_playerid)}")
+    # player1 = Player()
+    # player2 = Player()
     current_left_player = start_playerid
-    locked_players[current_left_player] = 1
+    locked_players = {current_left_player: True}
+    guessed_teams = {}
+    teams_over_limit = []
     current_left_player_teammates = get_all_teammates_of_player(current_left_player)
+    current_client_idx = 0
+    game["turn"] = clients[current_client_idx]
+    game["last_response"] = {
+        "start_player": start_playerid,
+    }
+    num_guesses = 0
+    # while True:
+    #     print(f"Player {'1' if player1_turn else '2'}'s turn.\n")
+    #     current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player1 if player1_turn else player2, time.time(), 20)
+    #     if current_left_player == -1:
+    #         print(f"Player {'1' if player1_turn else '2'} ran out of time. Player {'2' if player1_turn else '1'} wins!!")
+    #         break
+    #     player1_turn = not player1_turn
+
     while True:
-        print(f"Player {'1' if player1_turn else '2'}'s turn.\n")
-        current_left_player, current_left_player_teammates = battle_turn_options(current_left_player_teammates, current_left_player, locked_players, guessed_teams, player1 if player1_turn else player2, time.time(), 20)
-        if current_left_player == -1:
-            print(f"Player {'1' if player1_turn else '2'} ran out of time. Player {'2' if player1_turn else '1'} wins!!")
-            break
-        player1_turn = not player1_turn
+        with game["condition"]:
+            while game["last_guess"] is None:
+                game["condition"].wait()
+        print(f"Current player's turn: {game['turn']}")
+        teammate_guess = game["last_guess"]
+        game["last_guess"] = None
+
+        if teammate_guess not in current_left_player_teammates:
+            game["last_response"] = {
+                "result": "not_a_teammate",
+                "player": teammate_guess,
+            }
+            continue
+
+        if locked_players.get(teammate_guess):
+            game["last_response"] = {
+                "result": "already_used",
+            }
+            continue
+
+        teams = db_getters.get_common_teams(teammate_guess, current_left_player)
+        over_limit = False
+        for team in teams:
+            guessed_teams[team] = guessed_teams.get(team, 0) + 1
+            if guessed_teams[team] > TEAM_USE_LIMIT:
+                over_limit = True
+                teams_over_limit.append(team)
+
+        if over_limit:
+            game["last_response"] = {
+                "result": "over_limit",
+                "teams": teams_over_limit
+            }
+            teams_over_limit.clear()
+            continue
+
+        # Valid guess
+        current_left_player = teammate_guess
+        locked_players[current_left_player] = True
+        guessed_team_strikes = list(map(lambda t: guessed_teams.get(t, 0), teams))
+        num_guesses+=1
+
+        game["current"] = current_left_player
+        game["guesses"] = num_guesses
+
+        # TODO: find good end condition (maybe timer?)
+        game["last_response"] = {
+            "result": "continue",
+            "next_player": current_left_player,
+            "teams": teams,
+            "strikes": guessed_team_strikes,
+            "guesses": num_guesses
+        }
+
+        current_left_player_teammates = get_all_teammates_of_player(current_left_player)
+        # move to next player
+        current_client_idx = (current_client_idx + 1) % len(clients)
+        game["turn"] = clients[current_client_idx]
+
+    # Game over – wait for restart or exit
+    with game["condition"]:
+        while game["play_again"] is None:
+            game["condition"].wait()
+
+    # Exit cleanly. The new thread will be started by /play-again
+    sessions.pop(session_id, None)
 
 def single_player_connect_game(session_id: str):
     global teammate_graph
@@ -329,9 +434,8 @@ def single_player_connect_game(session_id: str):
     num_guesses = 0
     locked_players = {current_left_player: True}
     guessed_teams = {}
-    print("Starting to find teammates")
+    teams_over_limit = []
     current_left_player_teammates = get_all_teammates_of_player(current_left_player)
-    print("Found teammates")
 
     print(f"[{session_id}] Start player: {db_getters.get_name_from_playerid(start_playerid)}")
     print(f"[{session_id}] End player: {db_getters.get_name_from_playerid(end_playerid)}")
@@ -339,37 +443,41 @@ def single_player_connect_game(session_id: str):
         with game["condition"]:
             while game["last_guess"] is None:
                 game["condition"].wait()
-
-        print("Got past waiting for the condition!")
-
+        num_guesses += 1
         teammate_guess = game["last_guess"]
         game["last_guess"] = None
 
         if teammate_guess not in current_left_player_teammates:
-            game["last_response"] = {"result": "not_a_teammate"}
+            game["last_response"] = {
+                "result": "not_a_teammate",
+                "player": teammate_guess,
+            }
             continue
 
         if locked_players.get(teammate_guess):
             game["last_response"] = {"result": "already_used"}
             continue
 
-        print("Finding common teams")
         teams = db_getters.get_common_teams(teammate_guess, current_left_player)
-        print("Found common teams")
         over_limit = False
         for team in teams:
             guessed_teams[team] = guessed_teams.get(team, 0) + 1
             if guessed_teams[team] > TEAM_USE_LIMIT:
                 over_limit = True
+                teams_over_limit.append(team)
 
         if over_limit:
-            game["last_response"] = {"result": "over_limit"}
+            game["last_response"] = {
+                "result": "over_limit",
+                "teams": teams_over_limit
+            }
+            teams_over_limit.clear()
             continue
 
         # Valid guess
         current_left_player = teammate_guess
         locked_players[current_left_player] = True
-        num_guesses += 1
+        guessed_team_strikes = list(map(lambda t: guessed_teams.get(t, 0), teams))
 
         game["current"] = current_left_player
         game["guesses"] = num_guesses
@@ -378,6 +486,7 @@ def single_player_connect_game(session_id: str):
             game["last_response"] = {
                 "result": "correct",
                 "teams": teams,
+                "strikes": guessed_team_strikes,
                 "guesses": num_guesses
             }
             break
@@ -386,12 +495,11 @@ def single_player_connect_game(session_id: str):
                 "result": "continue",
                 "next_player": current_left_player,
                 "teams": teams,
+                "strikes": guessed_team_strikes,
                 "guesses": num_guesses
             }
 
-        print("Starting to find teammates")
         current_left_player_teammates = get_all_teammates_of_player(current_left_player)
-        print("Found teammates")
 
     # Game over – wait for restart or exit
     with game["condition"]:
@@ -402,19 +510,19 @@ def single_player_connect_game(session_id: str):
     sessions.pop(session_id, None)
 
 
-def run():
-    game_type = input("Which game would you like to play?\n - single\n - battle\n")
-    if game_type.lower() == GameType.SINGLE.name.lower():
-        single_player_connect_game(None)
-    elif game_type.lower() == GameType.BATTLE.name.lower():
-        battle_game(None)
-        run()
-    else:
-        print("Bad input! Try again.\n")
-        run()
+# def run():
+#     game_type = input("Which game would you like to play?\n - single\n - battle\n")
+#     if game_type.lower() == GameType.SINGLE.name.lower():
+#         single_player_connect_game(None)
+#     elif game_type.lower() == GameType.BATTLE.name.lower():
+#         battle_game(None)
+#         run()
+#     else:
+#         print("Bad input! Try again.\n")
+#         run()
 
-if __name__ == "__main__":
-    run()
+# if __name__ == "__main__":
+#     run()
 
 
 # Build the graph at server start
