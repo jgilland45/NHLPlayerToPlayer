@@ -1,8 +1,19 @@
 <template>
-  <div class="game-container">
+  <div
+    v-if="loading"
+    class="loading"
+  >
+    <p>Loading teammate graph... please wait!</p>
+  </div>
+  <div
+    class="game_container"
+    :class="{
+      is_loading: loading,
+    }"
+  >
     <button @click="startGame">Start Game</button>
-    <div class="player-connections">
-      <div class="start-player">
+    <div class="player_connections">
+      <div class="start_player">
         <span>Starting player:</span>
         <PlayerCard
           v-if="startPlayer"
@@ -10,14 +21,14 @@
           :player-image-u-r-l="startPlayer.image_url"
         />
       </div>
-      <div class="connecting-players">
+      <div class="connecting_players">
         <PlayerCard
           v-for="player in connectedPlayers"
           :player-name="player.name"
           :player-image-u-r-l="player.image_url"
         />
       </div>
-      <div class="end-player">
+      <div class="end_player">
         <span>Ending player:</span>
         <PlayerCard
           v-if="endPlayer"
@@ -26,7 +37,7 @@
         />
       </div>
     </div>
-    <div class="players-list">
+    <div class="players_list">
       <InputSearch v-model="searchTerm" />
       <PlayerCard
         v-for="player in filteredResults"
@@ -38,6 +49,12 @@
     </div>
     <p>{{ message }}</p>
     <p v-if="gameOver">🎉 Game Over!</p>
+    <button
+      v-if="gameOver"
+      @click="playAgain"
+    >
+      Play Again
+    </button>
   </div>
 </template>
 
@@ -62,8 +79,10 @@ const sessionId = 'abc123';
 const startPlayer = ref<Player | null>(null);
 const endPlayer = ref<Player | null>(null);
 const message = ref<string>('');
+const polling = ref(false);
 const gameOver = ref<boolean>(false);
-
+const graphStatus = ref('building');
+const loading = ref(true);
 const searchTerm = ref<string>('');
 const players = ref<Player[]>([]);
 const connectedPlayers = ref<Player[]>([]);
@@ -83,7 +102,7 @@ const filteredResultsLength = computed(() => filteredResults.value.length);
 const startGame = async () => {
   const res = await axios.post(`${SERVER_URL}/start-game`, {
     session_id: sessionId
-  })
+  });
   startPlayer.value = await getPlayerObjectFromID(res.data.start_player);
   endPlayer.value = await getPlayerObjectFromID(res.data.end_player);
 }
@@ -91,21 +110,78 @@ const startGame = async () => {
 const onPlayerChoiceClick = async (idx: number) => {
   console.log(players.value[idx]);
   
-  const res = await axios.post(`${SERVER_URL}/make-guess`, {
+  await axios.post(`${SERVER_URL}/make-guess`, {
     session_id: sessionId,
     guess: players.value[idx].playerid
-  })
+  });
 
-  if (res.data.result === 'correct') {
-    message.value = `You connected the players in ${res.data.guesses} guesses!`;
-    gameOver.value = true
-  } else if (res.data.result === 'continue') {
-    message.value = `Good! They both played for: ${res.data.teams.join(', ')}`;
-    connectedPlayers.value.push(await getPlayerObjectFromID(res.data.next_player));
-  } else {
-    message.value = 'Nope, not a connection! Try again.';
-  }
+  // this polls the server for whether the guess was correct or not
+  pollResponse();
 };
+
+const playAgain = async () => {
+  const res = await axios.post('http://localhost:8080/play-again', {
+    session_id: sessionId,
+    play_again: true,
+  });
+
+  // Replace old game state with new one
+  startPlayer.value = await getPlayerObjectFromID(res.data.start_player);
+  endPlayer.value = await getPlayerObjectFromID(res.data.end_player);
+  message.value = '';
+  searchTerm.value = '';
+  gameOver.value = false;
+  connectedPlayers.value = [];
+
+  pollGraphStatus();
+};
+
+const pollResponse = async () => {
+  if (polling.value) return;
+  polling.value = true;
+
+  const check = async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/check-response`, {
+        params: { session_id: sessionId }
+      });
+
+      if (res.data.result === 'waiting') {
+        setTimeout(check, 100)  // Try again in 100ms
+      } else {
+        handleGameResponse(res.data);
+        polling.value = false;
+      }
+    } catch (err) {
+      console.error("Polling error", err);
+      polling.value = false;
+    }
+  }
+
+  check();
+}
+
+const handleGameResponse = async (data: any) => {
+  if (data.result === 'not_a_teammate') {
+    message.value = '❌ Not a teammate!';
+  } else if (data.result === 'already_used') {
+    message.value = '⚠️ Already guessed that player.';
+  } else if (data.result === 'over_limit') {
+    message.value = '🚫 Team overuse limit reached.';
+  } else if (data.result === 'correct') {
+    message.value = `🎉 You won in ${data.guesses} guesses!`;
+    gameOver.value = true;
+    searchTerm.value = '';
+  } else if (data.result === 'continue') {
+    message.value = `✅ Correct! They both played for: ${data.teams.join(', ')}`;
+    connectedPlayers.value.push(await getPlayerObjectFromID(data.next_player));
+    searchTerm.value = '';
+  } else if (data.result === 'waiting') {
+    message.value = 'Waiting for result...';
+  } else {
+    message.value = '⚠️ Unknown response.';
+  }
+}
 
 const getPlayerObjectFromID = async (playerid: number): Promise<Player> => {
   const response = await fetch(`${DB_URL}/player/${playerid}/name`);
@@ -137,17 +213,45 @@ async function fetchPlayers() {
   }
 }
 
-onMounted(fetchPlayers);
+const pollGraphStatus = async () => {
+  try {
+    const res = await axios.get(`${SERVER_URL}/graph-status`);
+    graphStatus.value = res.data.status;
+
+    if (res.data.status !== 'ready') {
+      setTimeout(pollGraphStatus, 300); // try again in 300ms
+    } else {
+      loading.value = false;
+    }
+  } catch (err) {
+    console.error("Graph polling failed:", err);
+    setTimeout(pollGraphStatus, 1000);
+  }
+};
+
+
+onMounted(() => {
+  fetchPlayers();
+  pollGraphStatus();
+});
 </script>
 
 <style scoped lang="postcss">
-.game-container {
+.loading {
+  @apply absolute left-1/2 top-1/2;
+}
+.game_container {
   @apply flex flex-row flex-auto justify-center items-center w-full h-full;
-  .player-connections {
+
+  &.is_loading {
+    @apply select-none blur-lg pointer-events-none;
+  }
+
+  .player_connections {
     @apply flex flex-col justify-center items-center h-full max-h-[800px] overflow-auto;
   }
 
-  .players-list {
+  .players_list {
     @apply flex flex-col w-full p-4 h-full max-h-[500px] overflow-auto;
   }
 }
