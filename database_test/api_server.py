@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import create_tables
 import db_getters
+import requests
 
 # run using: `uvicorn api_server:app --reload --host 0.0.0.0 --port 8000`
 
@@ -69,3 +70,20 @@ def get_player_teams(player1: int, player2: int, gametype: str = "all"):
         return {"teammates": db_getters.get_common_teams(player1, player2)}
     else:
         return {"teammates": db_getters.get_reg_and_playoff_common_teams(player1, player2)}
+    
+@app.get("/team/logo")
+def get_team_logo(team_tricode: str, year: int):
+    url = "https://records.nhl.com/site/api/franchise?include=teams.id&include=teams.active&include=teams.triCode&include=teams.placeName&include=teams.commonName&include=teams.fullName&include=teams.logos&include=teams.conference.name&include=teams.division.name&include=teams.franchiseTeam.firstSeason.id&include=teams.franchiseTeam.lastSeason.id&include=teams.franchiseTeam.teamCommonName"
+    response = requests.get(url)
+    data = response.json()
+
+    for franchise in data.get("data", []):
+        for team in franchise.get("teams", []):
+            if team.get("triCode") == team_tricode:
+                logos = team.get("logos", [])
+                valid_logos = [logo for logo in logos if int(logo.get("startSeason", 0)) <= year]
+                if valid_logos:
+                    # Select the logo with the highest startSeason
+                    latest_logo = max(valid_logos, key=lambda x: int(x.get("startSeason", 0)))
+                    return {"logo": latest_logo.get("secureUrl"), "name": team.get("fullName")}
+    return None

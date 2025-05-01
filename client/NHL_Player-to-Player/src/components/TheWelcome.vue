@@ -13,29 +13,32 @@
   >
     <button @click="startGame">Start Game</button>
     <div class="player_connections">
-      <div class="start_player">
-        <span>Starting player:</span>
-        <PlayerCard
-          v-if="startPlayer"
-          :player-name="startPlayer.name"
-          :player-image-u-r-l="startPlayer.image_url"
-        />
-      </div>
+      <PlayerCard
+        v-if="startPlayer"
+        :player-name="startPlayer.name"
+        :player-image-u-r-l="startPlayer.image_url"
+      />
       <div class="connecting_players">
-        <PlayerCard
-          v-for="player in connectedPlayers"
-          :player-name="player.name"
-          :player-image-u-r-l="player.image_url"
-        />
+        <div
+          v-for="(_, i) in connections"
+          class="single_player_connection"
+        >
+          <TeamConnectionBundle
+            v-if="connections.length > i"
+            :team-connections="connections[i]"
+          />
+          <PlayerCard
+            v-if="connectedPlayers.length > i"
+            :player-name="connectedPlayers[i].name"
+            :player-image-u-r-l="connectedPlayers[i].image_url"
+          />
+        </div>
       </div>
-      <div class="end_player">
-        <span>Ending player:</span>
-        <PlayerCard
-          v-if="endPlayer"
-          :player-name="endPlayer.name"
-          :player-image-u-r-l="endPlayer.image_url"
-        />
-      </div>
+      <PlayerCard
+        v-if="endPlayer"
+        :player-name="endPlayer.name"
+        :player-image-u-r-l="endPlayer.image_url"
+      />
     </div>
     <div class="players_list">
       <InputSearch v-model="searchTerm" />
@@ -62,6 +65,7 @@
 import { ref, computed, watch, watchEffect, onMounted } from 'vue';
 import InputSearch from './InputSearch.vue';
 import PlayerCard from './PlayerCard.vue';
+import TeamConnectionBundle, {type TeamConnection } from './TeamConnectionBundle.vue';
 import { useFuse } from '@vueuse/integrations/useFuse';
 import axios from 'axios'
 
@@ -86,6 +90,7 @@ const loading = ref(true);
 const searchTerm = ref<string>('');
 const players = ref<Player[]>([]);
 const connectedPlayers = ref<Player[]>([]);
+const connections = ref<TeamConnection[][]>([]);
 
 const options = computed(() => ({
   fuseOptions: {
@@ -120,7 +125,7 @@ const onPlayerChoiceClick = async (idx: number) => {
 };
 
 const playAgain = async () => {
-  const res = await axios.post('http://localhost:8080/play-again', {
+  const res = await axios.post(`${SERVER_URL}/play-again`, {
     session_id: sessionId,
     play_again: true,
   });
@@ -132,6 +137,7 @@ const playAgain = async () => {
   searchTerm.value = '';
   gameOver.value = false;
   connectedPlayers.value = [];
+  connections.value = [];
 
   pollGraphStatus();
 };
@@ -170,17 +176,40 @@ const handleGameResponse = async (data: any) => {
     message.value = '🚫 Team overuse limit reached.';
   } else if (data.result === 'correct') {
     message.value = `🎉 You won in ${data.guesses} guesses!`;
+    connections.value.push(await getTeamInfoFromCommonTeams(data.teams));
     gameOver.value = true;
     searchTerm.value = '';
   } else if (data.result === 'continue') {
     message.value = `✅ Correct! They both played for: ${data.teams.join(', ')}`;
     connectedPlayers.value.push(await getPlayerObjectFromID(data.next_player));
+    connections.value.push(await getTeamInfoFromCommonTeams(data.teams));
     searchTerm.value = '';
   } else if (data.result === 'waiting') {
     message.value = 'Waiting for result...';
   } else {
     message.value = '⚠️ Unknown response.';
   }
+}
+
+const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnection[]> => {
+  let allTeamConnections: TeamConnection[] = [];
+  for (let team of teams) {
+    const tri_code = team.slice(0, 3);
+    const years = team.slice(3, team.length);
+    const res = await axios.get(`${DB_URL}/team/logo`, {
+      params: { team_tricode: tri_code, year: years }
+    });
+    const logo = res.data.logo;
+    const name = res.data.name + " " + years.slice(0, 4) + "-" + years.slice(4, years.length);
+    // TODO: update this using server data later
+    const numStrikes = 0;
+    allTeamConnections.push({
+      teamName: name,
+      numStrikes,
+      teamLogoURL: logo,
+    });
+  }
+  return allTeamConnections;
 }
 
 const getPlayerObjectFromID = async (playerid: number): Promise<Player> => {
@@ -241,7 +270,7 @@ onMounted(() => {
   @apply absolute left-1/2 top-1/2;
 }
 .game_container {
-  @apply flex flex-row flex-auto justify-center items-center w-full h-full;
+  @apply flex flex-col flex-auto justify-center items-center w-full h-full;
 
   &.is_loading {
     @apply select-none blur-lg pointer-events-none;

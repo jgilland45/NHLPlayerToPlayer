@@ -368,6 +368,7 @@ def single_player_connect_game(session_id: str):
         if current_left_player == end_playerid:
             game["last_response"] = {
                 "result": "correct",
+                "teams": teams,
                 "guesses": num_guesses
             }
             break

@@ -43,6 +43,7 @@ Backend:
         - could use rust? or just python would work to (use what is in `test_game.py`)
     - use sockets to connect client to server
     - current issues
-        - python backend REALLY slow for teammate guess
         - need to hook up front-end components (team links, incorrect guess, game over screen)
         - instead of getting players through the client from the db directly, maybe get the player list from the server?
+        - look into making socket-like connections, rather than having client polling server
+        - fix `any` typing issues
