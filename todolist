@@ -39,11 +39,9 @@ Backend:
         - add in fuzzy search for player names (possibly leave this for GUI app)
 
 - todo 04/30/2025
-    - create backend to run the brains of the different games
-        - could use rust? or just python would work to (use what is in `test_game.py`)
-    - use sockets to connect client to server
     - current issues
         - need to hook up front-end components (team links, incorrect guess, game over screen)
         - instead of getting players through the client from the db directly, maybe get the player list from the server?
         - look into making socket-like connections, rather than having client polling server
         - fix `any` typing issues
+        - add in an optimal path after the game is over
