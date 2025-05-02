@@ -37,6 +37,7 @@
             v-if="connections.length > i"
             :team-connections="connections[i]"
           />
+          <span>↓</span>
           <PlayerCard
             v-if="connectedPlayers.length > i"
             :player-name="connectedPlayers[i].name"
@@ -322,6 +323,10 @@ onMounted(() => {
 
     .connecting_players {
       @apply overflow-auto;
+
+      .single_player_connection {
+        @apply flex flex-col justify-center items-center; 
+      }
     }
   }
 

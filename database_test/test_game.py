@@ -2,8 +2,8 @@ import create_tables
 import db_getters
 from enum import Enum
 import time
-from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from collections import deque, defaultdict
 import threading
@@ -90,6 +90,39 @@ class Player:
         return self.time
     def get_listteam(self):
         return self.listteam
+    
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+
+manager = ConnectionManager()
+    
+@app.websocket("/ws/{client}")
+async def websocket_endpoint(websocket: WebSocket, client: str):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.send_personal_message(f"You wrote: {data}", websocket)
+            await manager.broadcast(f"Client #{client} says: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast(f"Client #{client} left the chat")
     
 @app.post("/multi-player/join-lobby")
 def join_lobby(req: JoinLobbyRequest):
@@ -186,7 +219,7 @@ def check_state(session_id: str):
     return {"result": "waiting"}
 
 @app.post("/{game_type}/play-again")
-def play_again(req: PlayAgainRequest):
+def play_again(req: PlayAgainRequest, game_type: GameType):
     session = sessions.get(req.session_id)
     if not session:
         return {"error": "Session not found"}
@@ -195,7 +228,7 @@ def play_again(req: PlayAgainRequest):
     sessions.pop(req.session_id, None)
 
     # Start a new game (reusing the /start-game logic)
-    return start_game(StartRequest(session_id=req.session_id))
+    return start_game(StartRequest(session_id=req.session_id), game_type)
 
 @app.get("/{game_type}/graph-status")
 def graph_status():
