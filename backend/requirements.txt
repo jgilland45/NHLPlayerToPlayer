@@ -5,3 +5,4 @@ sqlalchemy
 pydantic-settings
 httpx
 redis
+neo4j

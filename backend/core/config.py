@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     """
 
     # Database configuration
-    # The default value points to a local SQLite database file named `nhl_app.db`
-    # in the project's root directory.
-    DATABASE_URL: str = f"sqlite:///{os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))}/nhl_app.db"
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "flamessuck"
 
     # Secret key for things like signing JWTs (JSON Web Tokens) in the future.
     # It's critical to set this in your environment for production.

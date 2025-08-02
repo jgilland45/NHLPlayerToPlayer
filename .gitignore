@@ -178,6 +178,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Neo4j local data
+neo4j-data/
+
 # pytype static type analyzer
 .pytype/
 

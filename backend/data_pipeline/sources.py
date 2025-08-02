@@ -24,54 +24,33 @@ async def fetch_game_boxscore(client: httpx.AsyncClient, game_id: int) -> Dict[s
         print(f"Request error for game {game_id}: {e}")
     return {}
 
+async def fetch_player_landing(client: httpx.AsyncClient, player_id: int) -> Dict[str, Any]:
+    """Fetches the landing page data for a single player to get their full name."""
+    url = f"{NHL_API_BASE_URL}/player/{player_id}/landing"
+    try:
+        response = await client.get(url, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            print(f"Player {player_id} not found (404).")
+        else:
+            print(f"HTTP error fetching player {player_id}: {e.response.status_code} - {e.response.text}")
+    except httpx.RequestError as e:
+        print(f"Request error for player {player_id}: {e}")
+    return {}
+
 async def get_all_game_ids_for_season(client: httpx.AsyncClient, season: int) -> List[int]:
     """Gets all game IDs for a given season."""
     print(f"Fetching all game IDs for {season}-{season+1} season.")
-    url = f"{NHL_API_BASE_URL_2}/game"
+    # The API expects the season in YYYYYYYY format, e.g., 20232024
+    season_str = f"{season}{season+1}"
+    url = f"{NHL_API_BASE_URL_2}/game?cayenneExp=season={season_str}"
     try:
         response = await client.get(url, timeout=10.0)
         response.raise_for_status()
         all_games: List = response.json()['data']
-        print(list(map(lambda x: x['id'], all_games))[-10:])
-        # Filter games by season and extract game IDs
-        # The game ID format is YYYY02XXXX for regular season, YYYY03XXXX for playoffs, and similar for other game types
-        # We want to ensure we only get games for the specified season.
-        return [game['id'] for game in all_games if game['id'] > season * 1000000 + 20000 and game['id'] < season * 1000000 + 99999]
+        return [game['id'] for game in all_games]
     except httpx.HTTPStatusError as e:
         print(f"HTTP error fetching all games: {e.response.status_code} - {e.response.text}")
-    return []
-
-async def get_players_in_game(client: httpx.AsyncClient, gameid: int) -> List[Dict[str, Any]]:
-    game_url = f"{NHL_API_BASE_URL}/gamecenter/{gameid}/boxscore"
-
-    try:
-        response = await client.get(game_url, timeout=10.0)
-        response.raise_for_status()
-        data = response.json()
-        home_team = data['playerByGameStats']['homeTeam']
-        home_team_tricode = data['homeTeam']['abbrev']
-        away_team = data['playerByGameStats']['awayTeam']
-        away_team_tricode = data['awayTeam']['abbrev']
-        season = data['season']
-        positions = ['forwards', 'defense', 'goalies']
-        player_game_info = []
-        for position in positions:
-            players = home_team[position]
-            for player in players:
-                player_game_info.append({
-                    'playerid': player['playerId'],
-                    'gameid': gameid,
-                    'teamid': home_team_tricode + str(season),
-                    })
-            players = away_team[position]
-            for player in players:
-                player_game_info.append({
-                    'playerid': player['playerId'],
-                    'gameid': gameid,
-                    'teamid': away_team_tricode + str(season),
-                    })
-        return player_game_info
-    except httpx.HTTPStatusError as e:
-        print(f"HTTP error fetching players in game: {e.response.status_code} - {e.response.text}")
-        
     return []
