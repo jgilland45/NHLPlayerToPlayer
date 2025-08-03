@@ -12,11 +12,13 @@ class Settings(BaseSettings):
     # Database configuration
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "flamessuck"
+    # It's best practice to load secrets from the environment.
+    # The value in your .env file will override this default.
+    NEO4J_PASSWORD: str = "password"
 
     # Secret key for things like signing JWTs (JSON Web Tokens) in the future.
     # It's critical to set this in your environment for production.
-    SECRET_KEY: str = "a-super-secret-key-that-you-should-change"
+    SECRET_KEY: str = "a-super-secret-key-that-should-be-changed"
 
     # API settings
     # This could be used to configure allowed origins for CORS
