@@ -1,11 +1,38 @@
+import asyncio
 import httpx
 import logging
+from functools import wraps
 from typing import List, Dict, Any
 
 # Base URL for the new NHL API
 NHL_API_BASE_URL = "https://api-web.nhle.com/v1"
 NHL_API_BASE_URL_2 = "https://api.nhle.com/stats/rest/en"
 
+def async_retry(max_retries=3, initial_delay=1.0, backoff=2.0):
+    """
+    A decorator for retrying an async function on transient network errors.
+    It will retry on any httpx.RequestError (e.g., ReadError, ConnectError).
+    If all retries fail, the original exception is re-raised to be handled
+    by the function's own error handling.
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            delay = initial_delay
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except httpx.RequestError as e:
+                    if attempt < max_retries - 1:
+                        print(f"Attempt {attempt + 1}/{max_retries} failed for {func.__name__}: {type(e).__name__}. Retrying in {delay:.2f}s...")
+                        await asyncio.sleep(delay)
+                        delay *= backoff
+                    else:
+                        raise # On the final attempt, re-raise the exception.
+        return wrapper
+    return decorator
+
+@async_retry()
 async def fetch_game_boxscore(client: httpx.AsyncClient, game_id: int) -> Dict[str, Any]:
     """Fetches the boxscore for a single game."""
     url = f"{NHL_API_BASE_URL}/gamecenter/{game_id}/boxscore"
@@ -21,9 +48,10 @@ async def fetch_game_boxscore(client: httpx.AsyncClient, game_id: int) -> Dict[s
         else:
             print(f"HTTP error fetching game {game_id}: {e.response.status_code} - {e.response.text}")
     except httpx.RequestError as e:
-        print(f"Request error for game {game_id}: {e}")
+        print(f"Request error for game {game_id}: {type(e).__name__} for URL {e.request.url}")
     return {}
 
+@async_retry()
 async def fetch_player_landing(client: httpx.AsyncClient, player_id: int) -> Dict[str, Any]:
     """Fetches the landing page data for a single player to get their full name."""
     url = f"{NHL_API_BASE_URL}/player/{player_id}/landing"
@@ -37,7 +65,7 @@ async def fetch_player_landing(client: httpx.AsyncClient, player_id: int) -> Dic
         else:
             print(f"HTTP error fetching player {player_id}: {e.response.status_code} - {e.response.text}")
     except httpx.RequestError as e:
-        print(f"Request error for player {player_id}: {e}")
+        print(f"Request error for player {player_id}: {type(e).__name__} for URL {e.request.url}")
     return {}
 
 async def get_all_game_ids_for_season(client: httpx.AsyncClient, season: int) -> List[int]:

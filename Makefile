@@ -74,6 +74,10 @@ db-clear:
 	@echo "Clearing all data from the database..."
 	@python3 backend/data_pipeline/run_pipeline.py --clear
 
+db-get-remaining-years:
+	@echo "Getting years to still process..."
+	@python3 backend/data_pipeline/run_pipeline.py --years-remaining
+
 db-populate:
 	@echo "Running the data pipeline to populate the database..."
 	@python3 backend/data_pipeline/run_pipeline.py
