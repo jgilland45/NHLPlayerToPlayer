@@ -7,3 +7,5 @@ httpx
 redis
 neo4j
 python-dotenv
+pytest
+pytest-asyncio

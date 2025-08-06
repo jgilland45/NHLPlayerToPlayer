@@ -2,12 +2,18 @@ import asyncio
 import httpx
 import sys
 from collections import Counter
+import logging
 from typing import Dict, Any, List
 from backend.db import session
 from backend.data_pipeline import sources
 
-# RUN THIS BEFORE RUNNING PIPELINE
-# export PYTHONPATH="/home/jgilland/dev/NHLPlayerToPlayer/:$PYTHONPATH"
+# --- Setup Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
 
 def _extract_player_ids_from_roster(roster: Dict[str, Any]) -> List[int]:
     """Extracts all player IDs from a team's roster in the boxscore."""
@@ -46,10 +52,10 @@ def _get_relationship_type_from_game_id(game_id: int) -> str:
 
 async def clear_database():
     """Deletes all nodes and relationships from the Neo4j database."""
-    print("--- Clearing the entire Neo4j database ---")
+    logger.info("--- Clearing the entire Neo4j database ---")
     db = session.get_graph_db()
     await db.run_query("MATCH (n) DETACH DELETE n")
-    print("Database cleared successfully.")
+    logger.info("Database cleared successfully.")
 
 async def get_existing_game_ids(db: session.GraphDB) -> set[int]:
     """Queries the database to find which games have already been processed."""
@@ -71,29 +77,29 @@ async def main():
 
     async with httpx.AsyncClient() as client:
         # 1. Get all game IDs that are already in the database.
-        print("Checking for games already in the database...")
+        logger.info("Checking for games already in the database...")
         existing_game_ids = await get_existing_game_ids(db)
-        print(f"Found {len(existing_game_ids)} games already processed.")
+        logger.info(f"Found {len(existing_game_ids)} games already processed.")
 
         # 2. Fetch all game IDs for all relevant seasons from the NHL API.
         all_possible_seasons = range(1917, 2025) # NHL seasons from 1917-18 to 2024-25
-        print(f"Fetching all game IDs for seasons {all_possible_seasons.start} to {all_possible_seasons.stop - 1}...")
+        logger.info(f"Fetching all game IDs for seasons {all_possible_seasons.start} to {all_possible_seasons.stop - 1}...")
         
         season_id_tasks = [sources.get_all_game_ids_for_season(client, season) for season in all_possible_seasons]
         list_of_game_id_lists = await asyncio.gather(*season_id_tasks)
         
         all_api_game_ids = {game_id for sublist in list_of_game_id_lists for game_id in sublist}
-        print(f"Found a total of {len(all_api_game_ids)} possible games from the API.")
+        logger.info(f"Found a total of {len(all_api_game_ids)} possible games from the API.")
 
         # 3. Determine which games need to be processed.
         game_ids_to_process = sorted((Counter(all_api_game_ids) - Counter(existing_game_ids)).elements())
 
         if not game_ids_to_process:
-            print("\nAll games are up to date. No new data to process.")
+            logger.info("All games are up to date. No new data to process.")
             return
 
-        print(f"\nFound {len(game_ids_to_process)} new games to process.")
-        print(game_ids_to_process[:20])
+        logger.info(f"Found {len(game_ids_to_process)} new games to process.")
+        logger.info(f"Sample of games to process: {game_ids_to_process[:20]}")
 
         # 4. Process all missing games concurrently.
         semaphore = asyncio.Semaphore(25)
@@ -175,7 +181,7 @@ async def process_game(client: httpx.AsyncClient, db: session.GraphDB, game_id: 
 
         # FIX: Check for the existence of player stats to prevent KeyErrors.
         if 'playerByGameStats' not in game_data or not game_data.get('playerByGameStats'):
-            print(f"Skipping game {game_id}: Missing or empty 'playerByGameStats' data.")
+            logger.warning(f"Skipping game {game_id}: Missing or empty 'playerByGameStats' data.")
             return
 
         # 1. Extract all unique player IDs from the game.
@@ -228,10 +234,15 @@ async def process_game(client: httpx.AsyncClient, db: session.GraphDB, game_id: 
             rel_type=rel_type
         )
 
-        print(f"Processed game {game_id} for graph.")
+        logger.info(f"Processed game {game_id} for graph.")
 
 if __name__ == "__main__":
-    if "--clear" in sys.argv:
-        asyncio.run(clear_database())
-    else:
-        asyncio.run(main())
+    try:
+        if "--clear" in sys.argv:
+            asyncio.run(clear_database())
+        else:
+            asyncio.run(main())
+        logger.info("Pipeline finished successfully.")
+    except Exception as e:
+        logger.critical("Pipeline failed with an unhandled exception.", exc_info=True)
+        sys.exit(1)
