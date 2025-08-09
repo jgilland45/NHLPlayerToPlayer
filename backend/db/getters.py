@@ -1,6 +1,14 @@
 from typing import List, Dict, Any, Optional
 from backend.db.session import get_graph_db
 
+# NOTE: This adds a dependency on `thefuzz` library for fuzzy string matching.
+# You may need to install it: pip install "thefuzz[speedup]"
+from thefuzz import process
+
+def _year_to_season(year: int) -> int:
+    """Converts a 4-digit year (e.g., 2023) to an 8-digit NHL season format (e.g., 20232024)."""
+    return year * 10000 + (year + 1)
+
 async def get_all_players() -> List[Dict[str, Any]]:
     db = get_graph_db()
     query = """
@@ -63,7 +71,9 @@ async def get_random_playerid_from_team_and_years(tricode: str, loweryear: int, 
         LIMIT 1
         RETURN p.id AS playerid
     """
-    params = {"tricode": tricode.upper(), "loweryear": loweryear, "upperyear": upperyear}
+    loweryear_season = _year_to_season(loweryear)
+    upperyear_season = _year_to_season(upperyear)
+    params = {"tricode": tricode.upper(), "loweryear": loweryear_season, "upperyear": upperyear_season}
     result = await db.run_query(query, params)
     return result[0]["playerid"] if result else None
 
@@ -91,7 +101,9 @@ async def get_random_playerid_from_years(loweryear: int, upperyear: int) -> Opti
         LIMIT 1
         RETURN p.id AS playerid
     """
-    result = await db.run_query(query, {"loweryear": loweryear, "upperyear": upperyear})
+    loweryear_season = _year_to_season(loweryear)
+    upperyear_season = _year_to_season(upperyear)
+    result = await db.run_query(query, {"loweryear": loweryear_season, "upperyear": upperyear_season})
     return result[0]["playerid"] if result else None
 
 async def get_all_teammates_of_player(playerid: int) -> List[Dict[str, Any]]:
@@ -104,14 +116,79 @@ async def get_all_teammates_of_player(playerid: int) -> List[Dict[str, Any]]:
     result = await db.run_query(query, {"playerid": playerid})
     return [{"id": record["id"], "full_name": record["full_name"]} for record in result]
 
-async def get_common_teams(player1_id: int, player2_id: int) -> List[str]:
-    """Finds all teams where two players were teammates in the same game."""
-    db = get_graph_db()
-    query = """
-        MATCH (p1:Player {id: $p1_id})-[r]-(p2:Player {id: $p2_id})
-        RETURN DISTINCT r.team AS teamid
+async def get_teammates_of_player_with_options(
+    playerid: int,
+    teams: Optional[List[str]] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     """
+    Finds all teammates of a player, with optional filters for teams, years, and game types.
+    """
+    db = get_graph_db()
+    params = {"playerid": playerid}
+
+    # Build the relationship type string for the query, e.g., ":TEAMMATE_IN_REGULAR_SEASON|TEAMMATE_IN_PLAYOFFS"
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    # Build the WHERE clause dynamically
+    where_clauses = ["p2.fullName IS NOT NULL"]
+    if teams:
+        where_clauses.append("r.team IN $teams")
+        params["teams"] = [t.upper() for t in teams]
+    if start_year is not None:
+        where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
+    where_str = "WHERE " + " AND ".join(where_clauses)
+
+    query = f"""
+        MATCH (p1:Player {{id: $playerid}})-[r{rel_type_str}]-(p2:Player)
+        {where_str}
+        RETURN DISTINCT p2.id AS id, p2.fullName AS full_name
+    """
+    result = await db.run_query(query, params)
+    return [{"id": record["id"], "full_name": record["full_name"]} for record in result]
+
+async def get_common_teams(
+    player1_id: int,
+    player2_id: int,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
+) -> List[str]:
+    """Finds all teams where two players were teammates, with optional filters."""
+    db = get_graph_db()
     params = {"p1_id": player1_id, "p2_id": player2_id}
+
+    # Build the relationship type string for the query
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    # Build the WHERE clause dynamically
+    where_clauses = ["r.team IS NOT NULL"]
+    if start_year is not None:
+        where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
+    where_str = "WHERE " + " AND ".join(where_clauses)
+
+    query = f"""
+        MATCH (p1:Player {{id: $p1_id}})-[r{rel_type_str}]-(p2:Player {{id: $p2_id}})
+        {where_str}
+        RETURN DISTINCT r.team AS teamid
+        ORDER BY teamid
+    """
     result = await db.run_query(query, params)
     return [record["teamid"] for record in result]
 
@@ -137,16 +214,31 @@ async def get_reg_and_playoff_common_teams(player1_id: int, player2_id: int) -> 
     return [record["teamid"] for record in result]
 
 async def get_players_by_name(name: str) -> List[Dict[str, Any]]:
-    """Finds players matching a given full name (case-insensitive, partial match)."""
-    db = get_graph_db()
-    query = """
-        MATCH (p:Player)
-        WHERE toLower(p.fullName) CONTAINS toLower($name)
-        RETURN p.id AS id, p.fullName AS full_name
-        LIMIT 25
     """
-    result = await db.run_query(query, {"name": name})
-    return [{"id": record["id"], "full_name": record["full_name"]} for record in result]
+    Finds players matching a given name using fuzzy search.
+
+    NOTE: This implementation fetches all players into memory to perform the
+    fuzzy search. For a very large player database, this could be slow.
+    An alternative would be to use a database extension like Neo4j's APOC
+    for in-database fuzzy matching if available.
+    """
+    # 1. Get all players from the database. We can reuse the existing getter.
+    all_players = await get_all_players()  # This returns [{"playerid": ..., "name": ...}]
+
+    # 2. Create a mapping from player name to the full player object for easy lookup.
+    player_map = {p["name"]: p for p in all_players}
+
+    # 3. Use thefuzz to find the best matches, limited to 25 results.
+    best_matches = process.extract(name, player_map.keys(), limit=25)
+
+    # 4. Filter matches by a score threshold and format the final result list.
+    results = []
+    for match_name, score in best_matches:
+        # A score of 60 is a reasonable threshold to avoid very poor matches.
+        if score >= 60:
+            player_data = player_map[match_name]
+            results.append({"id": player_data["playerid"], "full_name": player_data["name"]})
+    return results
 
 async def get_name_from_playerid(playerid: int) -> Optional[str]:
     """Gets a player's full name from their ID."""
@@ -155,27 +247,77 @@ async def get_name_from_playerid(playerid: int) -> Optional[str]:
     result = await db.run_query(query, {"playerid": playerid})
     return result[0]["name"] if result else None
 
-async def get_teams_from_playerid(playerid: int) -> List[str]:
-    """Gets all unique team tricodes a player has played for."""
+async def get_teams_from_playerid(
+    playerid: int,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
+) -> List[str]:
+    """Gets all unique team tricodes a player has played for, with optional filters."""
     db = get_graph_db()
-    query = """
-        MATCH (p:Player {id: $playerid})-[r]-()
+    params = {"playerid": playerid}
+
+    # Build the relationship type string for the query, e.g., ":TEAMMATE_IN_REGULAR_SEASON|TEAMMATE_IN_PLAYOFFS"
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    # Build the WHERE clause dynamically
+    where_clauses = ["r.team IS NOT NULL"]
+    if start_year is not None:
+        where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
+    where_str = "WHERE " + " AND ".join(where_clauses)
+
+    query = f"""
+        MATCH (p:Player {{id: $playerid}})-[r{rel_type_str}]-()
+        {where_str}
         RETURN DISTINCT r.team AS teamid
+        ORDER BY teamid
     """
-    result = await db.run_query(query, {"playerid": playerid})
+    result = await db.run_query(query, params)
     return [record["teamid"] for record in result]
 
-async def find_shortest_path_between_players(player1_id: int, player2_id: int) -> List[Dict[str, Any]]:
-    """Finds the shortest path of teammates connecting two players."""
+async def find_shortest_path_between_players(
+    player1_id: int,
+    player2_id: int,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Finds the shortest path of teammates connecting two players, with optional filters."""
     db = get_graph_db()
-    query = """
+    params = {"p1_id": player1_id, "p2_id": player2_id}
+
+    # Build the relationship type string for the query
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    # Build the WHERE clause for inside the path pattern
+    path_where_clauses = []
+    if start_year is not None:
+        path_where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        path_where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
+    path_where_str = ""
+    if path_where_clauses:
+        path_where_str = "WHERE " + " AND ".join(path_where_clauses)
+
+    query = f"""
         MATCH path = shortestPath(
-          (p1:Player {id: $p1_id})-[*]-(p2:Player {id: $p2_id})
+          (p1:Player {{id: $p1_id}})-[r{rel_type_str}* {path_where_str}]-(p2:Player {{id: $p2_id}})
         )
         // Return a list of player nodes in the path
-        RETURN [node IN nodes(path) | {id: node.id, full_name: node.fullName}] AS path_nodes
+        RETURN [node IN nodes(path) | {{id: node.id, full_name: node.fullName}}] AS path_nodes
     """
-    params = {"p1_id": player1_id, "p2_id": player2_id}
     result = await db.run_query(query, params)
     # The query returns a list with a single record, which contains the list of nodes.
     return result[0]["path_nodes"] if result else []
