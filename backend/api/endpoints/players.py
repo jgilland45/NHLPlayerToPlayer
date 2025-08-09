@@ -175,6 +175,8 @@ async def get_shortest_path(
     start_year: Optional[int] = Query(None, description="The starting season year to filter by (e.g., 2016 for the 2016-17 season)."),
     end_year: Optional[int] = Query(None, description="The ending season year to filter by (e.g., 2018 for the 2018-19 season)."),
     game_types: Optional[List[str]] = Query(None, description=f"List of game types to include. Valid options: {list(GAME_TYPE_TO_REL_MAP.keys())}"),
+    include_players: Optional[List[int]] = Query(None, description="List of player IDs that MUST be in the path."),
+    exclude_players: Optional[List[int]] = Query(None, description="List of player IDs that MUST NOT be in the path."),
     db: GraphDB = Depends(get_graph_db)
 ):
     """
@@ -201,7 +203,13 @@ async def get_shortest_path(
             db_game_types.append(rel_type)
 
     path = await getters.find_shortest_path_between_players(
-        player1_id=player1_id, player2_id=player2_id, start_year=start_year, end_year=end_year, game_types=db_game_types
+        player1_id=player1_id,
+        player2_id=player2_id,
+        start_year=start_year,
+        end_year=end_year,
+        game_types=db_game_types,
+        include_players=include_players,
+        exclude_players=exclude_players,
     )
     if not path:
         raise HTTPException(status_code=404, detail="No connection path found between the players with the given filters.")

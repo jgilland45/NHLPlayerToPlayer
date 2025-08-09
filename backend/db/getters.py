@@ -288,6 +288,8 @@ async def find_shortest_path_between_players(
     start_year: Optional[int] = None,
     end_year: Optional[int] = None,
     game_types: Optional[List[str]] = None,
+    include_players: Optional[List[int]] = None,
+    exclude_players: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
     """Finds the shortest path of teammates connecting two players, with optional filters."""
     db = get_graph_db()
@@ -311,10 +313,24 @@ async def find_shortest_path_between_players(
     if path_where_clauses:
         path_where_str = "WHERE " + " AND ".join(path_where_clauses)
 
+    # Add conditions for including/excluding players
+    post_path_where_clauses = []
+    if include_players:
+        post_path_where_clauses.append("all(p_incl IN $include_players WHERE p_incl IN [n IN nodes(path) | n.id])")
+        params["include_players"] = include_players
+    if exclude_players:
+        post_path_where_clauses.append("none(p_excl IN $exclude_players WHERE p_excl IN [n IN nodes(path) | n.id])")
+        params["exclude_players"] = exclude_players
+
+    post_path_where_str = ""
+    if post_path_where_clauses:
+        post_path_where_str = "WHERE " + " AND ".join(post_path_where_clauses)
+
     query = f"""
         MATCH path = shortestPath(
           (p1:Player {{id: $p1_id}})-[r{rel_type_str}* {path_where_str}]-(p2:Player {{id: $p2_id}})
         )
+        {post_path_where_str}
         // Return a list of player nodes in the path
         RETURN [node IN nodes(path) | {{id: node.id, full_name: node.fullName}}] AS path_nodes
     """
