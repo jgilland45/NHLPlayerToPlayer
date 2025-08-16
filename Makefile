@@ -37,6 +37,8 @@ db-up:
 		-v $(shell pwd)/neo4j-data:/data \
 		-d \
 		-e NEO4J_AUTH=neo4j/$(NEO4J_PASSWORD) \
+		-e NEO4J_dbms_security_procedures_unrestricted=apoc.* \
+		-e NEO4JLABS_PLUGINS='["apoc"]' \
 		neo4j:latest
 
 db-start:

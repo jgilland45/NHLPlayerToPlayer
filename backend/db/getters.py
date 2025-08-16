@@ -291,49 +291,66 @@ async def find_shortest_path_between_players(
     include_players: Optional[List[int]] = None,
     exclude_players: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
-    """Finds the shortest path of teammates connecting two players, with optional filters."""
+    """
+    Finds the shortest path between two players using APOC expandConfig,
+    optimized by pushing year filters into relationshipFilter, reducing maxLevel,
+    and minimizing post-filtering in Cypher for better performance.
+    """
     db = get_graph_db()
-    params = {"p1_id": player1_id, "p2_id": player2_id}
 
-    # Build the relationship type string for the query
-    rel_type_str = ""
-    if game_types:
-        rel_type_str = f":{'|'.join(game_types)}"
+    rel_types = game_types or ["TEAMMATE_IN_REGULAR_SEASON", "TEAMMATE_IN_PLAYOFFS"]
 
-    # Build the WHERE clause for inside the path pattern
-    path_where_clauses = []
+    # Start building relationshipFilter string with direction
+    rel_filter = "|".join(rel_types) + ">"
+
+    # Append year filters directly on relationship properties in the filter
+    year_filters = []
+    params = {
+        "p1_id": player1_id,
+        "p2_id": player2_id,
+        "exclude_players": exclude_players or [],
+        "include_players": include_players or [],
+    }
+
     if start_year is not None:
-        path_where_clauses.append("r.season >= $start_year")
         params["start_year"] = _year_to_season(start_year)
+        year_filters.append(f"r.season >= $start_year")
     if end_year is not None:
-        path_where_clauses.append("r.season <= $end_year")
         params["end_year"] = _year_to_season(end_year)
+        year_filters.append(f"r.season <= $end_year")
 
-    path_where_str = ""
-    if path_where_clauses:
-        path_where_str = "WHERE " + " AND ".join(path_where_clauses)
-
-    # Add conditions for including/excluding players
-    post_path_where_clauses = []
-    if include_players:
-        post_path_where_clauses.append("all(p_incl IN $include_players WHERE p_incl IN [n IN nodes(path) | n.id])")
-        params["include_players"] = include_players
-    if exclude_players:
-        post_path_where_clauses.append("none(p_excl IN $exclude_players WHERE p_excl IN [n IN nodes(path) | n.id])")
-        params["exclude_players"] = exclude_players
-
-    post_path_where_str = ""
-    if post_path_where_clauses:
-        post_path_where_str = "WHERE " + " AND ".join(post_path_where_clauses)
+    if year_filters:
+        rel_filter += " AND " + " AND ".join(year_filters)
 
     query = f"""
-        MATCH path = shortestPath(
-          (p1:Player {{id: $p1_id}})-[r{rel_type_str}* {path_where_str}]-(p2:Player {{id: $p2_id}})
-        )
-        {post_path_where_str}
-        // Return a list of player nodes in the path
-        RETURN [node IN nodes(path) | {{id: node.id, full_name: node.fullName}}] AS path_nodes
+    MATCH (start:Player {{id: $p1_id}}), (end:Player {{id: $p2_id}})
+    CALL apoc.path.expandConfig(start, {{
+      relationshipFilter: "{rel_filter}",
+      minLevel: 1,
+      terminatorNodes: [end],
+      whitelistNodes: $include_players,
+      blacklistNodes: $exclude_players,
+      bfs: true,
+      filterStartNode: true
+    }})
+    YIELD path
+    RETURN [n IN nodes(path) | {{id: n.id, full_name: n.fullName}}] AS path_nodes
+    ORDER BY length(path)
+    LIMIT 1
     """
+    print(query)
+    print(params)
+
     result = await db.run_query(query, params)
-    # The query returns a list with a single record, which contains the list of nodes.
-    return result[0]["path_nodes"] if result else []
+    if not result:
+        return []
+
+    path_nodes = result[0]["path_nodes"]
+
+    # Post-filter for include_players: ensure all included players appear on path
+    if params["include_players"]:
+        path_node_ids = {node["id"] for node in path_nodes}
+        if not all(pid in path_node_ids for pid in params["include_players"]):
+            return []  # No path includes all required players
+
+    return path_nodes
