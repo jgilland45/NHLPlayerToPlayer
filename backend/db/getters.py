@@ -4,6 +4,7 @@ from backend.db.session import get_graph_db
 # NOTE: This adds a dependency on `thefuzz` library for fuzzy string matching.
 # You may need to install it: pip install "thefuzz[speedup]"
 from thefuzz import process
+from collections import defaultdict
 
 def _year_to_season(year: int) -> int:
     """Converts a 4-digit year (e.g., 2023) to an 8-digit NHL season format (e.g., 20232024)."""
@@ -225,19 +226,24 @@ async def get_players_by_name(name: str) -> List[Dict[str, Any]]:
     # 1. Get all players from the database. We can reuse the existing getter.
     all_players = await get_all_players()  # This returns [{"playerid": ..., "name": ...}]
 
-    # 2. Create a mapping from player name to the full player object for easy lookup.
-    player_map = {p["name"]: p for p in all_players}
+    # 2. Create a mapping from a player name to a list of players with that name.
+    # This handles cases where multiple players have the same name.
+    player_map = defaultdict(list)
+    for p in all_players:
+        player_map[p["name"]].append(p)
 
-    # 3. Use thefuzz to find the best matches, limited to 25 results.
+    # 3. Use thefuzz to find the best matching names, limited to 25 results.
     best_matches = process.extract(name, player_map.keys(), limit=25)
 
     # 4. Filter matches by a score threshold and format the final result list.
     results = []
     for match_name, score in best_matches:
-        # A score of 60 is a reasonable threshold to avoid very poor matches.
-        if score >= 60:
-            player_data = player_map[match_name]
-            results.append({"id": player_data["playerid"], "full_name": player_data["name"]})
+        # A score of 75 is a reasonable threshold to avoid very poor matches.
+        if score >= 75:
+            # Since multiple players can have the same name, extend the results list.
+            players_with_match_name = player_map[match_name]
+            for player_data in players_with_match_name:
+                results.append({"id": player_data["playerid"], "full_name": player_data["name"]})
     return results
 
 async def get_name_from_playerid(playerid: int) -> Optional[str]:
