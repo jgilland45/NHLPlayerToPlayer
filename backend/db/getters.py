@@ -107,6 +107,59 @@ async def get_random_playerid_from_years(loweryear: int, upperyear: int) -> Opti
     result = await db.run_query(query, {"loweryear": loweryear_season, "upperyear": upperyear_season})
     return result[0]["playerid"] if result else None
 
+async def get_random_player_with_filters(
+    teams: Optional[List[str]] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Gets a random player (ID and name) based on a combination of optional filters.
+    """
+    db = get_graph_db()
+    params = {}
+
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    where_clauses = []
+    if teams:
+        where_clauses.append("r.team IN $teams")
+        params["teams"] = [t.upper() for t in teams]
+    if start_year is not None:
+        where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
+    where_str = ""
+    if where_clauses:
+        where_str = "WHERE " + " AND ".join(where_clauses)
+
+    # This is a highly performant single-query method to get a random player.
+    # 1. Find all players matching the filters.
+    # 2. Use `WITH DISTINCT p` to immediately deduplicate them.
+    # 3. Collect the unique players into a list.
+    # 4. Return a single random player from that list using a random index.
+    # This avoids a slow `count(DISTINCT ...)` and a second `SKIP/LIMIT` query.
+    query = f"""
+        MATCH (p:Player)-[r{rel_type_str}]-()
+        {where_str}
+        WITH DISTINCT p
+        WITH collect(p) as players
+        // Return null if no players are found to avoid errors.
+        RETURN
+            CASE
+                WHEN size(players) > 0
+                THEN players[toInteger(rand() * size(players))]
+                ELSE null
+            END AS random_player
+    """
+    result = await db.run_query(query, params)
+    return result[0] if result else None
+
 async def get_all_teammates_of_player(playerid: int) -> List[Dict[str, Any]]:
     db = get_graph_db()
     query = """

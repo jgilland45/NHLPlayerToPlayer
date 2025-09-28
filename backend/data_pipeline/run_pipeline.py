@@ -50,6 +50,41 @@ def _get_relationship_type_from_game_id(game_id: int) -> str:
     # Default to a generic type if the code is unknown
     return type_mapping.get(game_type_code, "TEAMMATE_IN_OTHER")
 
+async def create_indexes():
+    """
+    Creates necessary indexes in the Neo4j database for query performance.
+    This is an idempotent operation; if indexes already exist, it does nothing.
+    """
+    logger.info("--- Ensuring database indexes are created ---")
+    db = session.get_graph_db()
+
+    # Index on Player ID for fast lookups
+    await db.run_query("CREATE INDEX player_id_index IF NOT EXISTS FOR (p:Player) ON (p.id)")
+
+    # To get all possible relationship types, we can inspect the mapping
+    # dictionary in the `_get_relationship_type_from_game_id` function.
+    all_rel_types = set(_get_relationship_type_from_game_id(g) for g in range(1, 20))
+    all_rel_types.add("TEAMMATE_IN_OTHER") # Add the default
+
+    # Create composite indexes on (season, team) for each relationship type.
+    # This will dramatically speed up filtering by year and team.
+    index_creation_tasks = []
+    for rel_type in all_rel_types:
+        # Neo4j index names must be unique. We'll generate one per type.
+        index_name = f"rel_{rel_type}_season_team_idx"
+        query = f"""
+        CREATE RANGE INDEX {index_name} IF NOT EXISTS
+        FOR ()-[r:{rel_type}]-() ON (r.season, r.team)
+        """
+        index_creation_tasks.append(db.run_query(query))
+
+    try:
+        await asyncio.gather(*index_creation_tasks)
+        logger.info("All necessary indexes have been created or already exist.")
+    except Exception as e:
+        logger.error("An error occurred during index creation.", exc_info=True)
+        raise
+
 async def clear_database():
     """Deletes all nodes and relationships from the Neo4j database."""
     logger.info("--- Clearing the entire Neo4j database ---")
@@ -240,6 +275,8 @@ if __name__ == "__main__":
     try:
         if "--clear" in sys.argv:
             asyncio.run(clear_database())
+        elif "--create-indexes" in sys.argv:
+            asyncio.run(create_indexes())
         else:
             asyncio.run(main())
         logger.info("Pipeline finished successfully.")

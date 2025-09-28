@@ -84,4 +84,8 @@ db-populate:
 	@echo "Running the data pipeline to populate the database..."
 	@python3 backend/data_pipeline/run_pipeline.py
 
+db-index:
+	@echo "Creating indexes in the db for better querying..."
+	@python3 backend/data_pipeline/run_pipeline.py --create-indexes
+
 db-reset: db-clear db-populate

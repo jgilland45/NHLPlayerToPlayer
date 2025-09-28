@@ -34,6 +34,48 @@ async def get_all_players(db: GraphDB = Depends(get_graph_db)):
     # The getter returns keys 'playerid' and 'name', which we map to the schema's 'id' and 'full_name'.
     return [{"id": p["playerid"], "full_name": p["name"]} for p in players]
 
+@router.get("/random", response_model=schemas.Player)
+async def get_random_player(
+        teams: Optional[List[str]] = Query(None, description="List of team tricodes to filter by (e.g., 'PIT', 'BOS')."),
+        start_year: Optional[int] = Query(None, description="The starting season year for the teammate connection (e.g., 2016 for the 2016-17 season)."),
+        end_year: Optional[int] = Query(None, description="The ending season year for the teammate connection (e.g., 2018 for the 2018-19 season)."),
+        game_types: Optional[List[str]] = Query(None, description=f"List of game types to include. Valid options: {list(GAME_TYPE_TO_REL_MAP.keys())}"),
+        db: GraphDB = Depends(get_graph_db)
+    ):
+    """
+    Returns a single random player, with optional filters for teams, years, and game types.
+    """
+    db_game_types = None
+    if game_types:
+        db_game_types = []
+        for gt in game_types:
+            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
+            if not rel_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
+                )
+            db_game_types.append(rel_type)
+
+    player_record = await getters.get_random_player_with_filters(
+        teams=teams,
+        start_year=start_year,
+        end_year=end_year,
+        game_types=db_game_types,
+    )
+
+    # The query returns a record with a 'random_player' field, which might be null.
+    if not player_record or player_record["random_player"] is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No player found matching the specified criteria."
+        )
+
+    # Extract the Node object from the record.
+    player_node = player_record["random_player"]
+
+    return schemas.Player(id=player_node["id"], full_name=player_node["fullName"])
+
 @router.get("/{player_id}", response_model=schemas.Player)
 async def get_player_by_id(player_id: int, db: GraphDB = Depends(get_graph_db)):
     """
