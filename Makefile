@@ -89,3 +89,11 @@ db-index:
 	@python3 backend/data_pipeline/run_pipeline.py --create-indexes
 
 db-reset: db-clear db-populate
+
+# ==============================================================================
+# Server management
+# ==============================================================================
+
+server-start:
+	@echo "Starting server..."
+	uvicorn backend.api.main:app --reload

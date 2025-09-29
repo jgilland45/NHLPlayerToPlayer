@@ -4,14 +4,11 @@
   </div>
   <PlayerCardUsingID 
     :id="currentPlayer"
-  >
-  <div
-    class="bg-white h-10"
+  />
+  <PlayerCardUsingID
     v-for="guess in guesses"
-  >
-    {{ guess }}
-  </div>
-  </PlayerCardUsingID>
+    :id="guess"
+  />
   <SearchWithResults 
     @click="playerClicked"
   />
@@ -47,9 +44,11 @@ const playerClicked = (player: Player) => {
 
 watch(wsResponse, (newVal) => {
   if (!newVal) return;
-  if (newVal.lastGuess) {
-    if (newVal.lastGuess.correct) {
-      guesses.value.push(newVal.lastGuess.player_id);
+  console.log('newVal: ', newVal);
+  if (newVal.last_guess) {
+    if (newVal.last_guess.correct) {
+      guesses.value.push(newVal.last_guess.guessed);
+      console.log(guesses.value);
     }
   }
   if (newVal.current_player) {
