@@ -1,4 +1,5 @@
 import asyncio
+import argparse
 import httpx
 import sys
 from collections import Counter
@@ -102,7 +103,36 @@ async def get_existing_game_ids(db: session.GraphDB) -> set[int]:
     result = await db.run_query(query)
     return {record["gameId"] for record in result if record["gameId"] is not None}
 
-async def main():
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Populate NHL teammate graph data into Neo4j.")
+    parser.add_argument("--clear", action="store_true", help="Delete all nodes and relationships from Neo4j.")
+    parser.add_argument("--create-indexes", action="store_true", help="Create Neo4j indexes for faster querying.")
+    parser.add_argument(
+        "--start-season",
+        type=int,
+        default=1917,
+        help="First season year to query (e.g., 2018 means 2018-19 season). Default: 1917.",
+    )
+    parser.add_argument(
+        "--end-season",
+        type=int,
+        default=2024,
+        help="Last season year to query (inclusive). Default: 2024.",
+    )
+    parser.add_argument(
+        "--max-games",
+        type=int,
+        default=None,
+        help="Optional cap on number of games to process after diffing against existing DB.",
+    )
+    parser.add_argument(
+        "--latest-first",
+        action="store_true",
+        help="Process newer game IDs first (recommended for quick partial loads).",
+    )
+    return parser.parse_args()
+
+async def main(args: argparse.Namespace):
     """
     Main function to run the data pipeline. It fetches all possible game IDs,
     compares them against games already in the database, and processes only
@@ -116,8 +146,11 @@ async def main():
         existing_game_ids = await get_existing_game_ids(db)
         logger.info(f"Found {len(existing_game_ids)} games already processed.")
 
-        # 2. Fetch all game IDs for all relevant seasons from the NHL API.
-        all_possible_seasons = range(1917, 2025) # NHL seasons from 1917-18 to 2024-25
+        if args.start_season > args.end_season:
+            raise ValueError("--start-season cannot be greater than --end-season")
+
+        # 2. Fetch all game IDs for the requested seasons from the NHL API.
+        all_possible_seasons = range(args.start_season, args.end_season + 1)
         logger.info(f"Fetching all game IDs for seasons {all_possible_seasons.start} to {all_possible_seasons.stop - 1}...")
         
         season_id_tasks = [sources.get_all_game_ids_for_season(client, season) for season in all_possible_seasons]
@@ -127,7 +160,15 @@ async def main():
         logger.info(f"Found a total of {len(all_api_game_ids)} possible games from the API.")
 
         # 3. Determine which games need to be processed.
-        game_ids_to_process = sorted((Counter(all_api_game_ids) - Counter(existing_game_ids)).elements())
+        game_ids_to_process = sorted(
+            (Counter(all_api_game_ids) - Counter(existing_game_ids)).elements(),
+            reverse=args.latest_first,
+        )
+
+        if args.max_games is not None:
+            if args.max_games <= 0:
+                raise ValueError("--max-games must be greater than 0")
+            game_ids_to_process = game_ids_to_process[:args.max_games]
 
         if not game_ids_to_process:
             logger.info("All games are up to date. No new data to process.")
@@ -273,12 +314,14 @@ async def process_game(client: httpx.AsyncClient, db: session.GraphDB, game_id: 
 
 if __name__ == "__main__":
     try:
-        if "--clear" in sys.argv:
+        args = parse_args()
+
+        if args.clear:
             asyncio.run(clear_database())
-        elif "--create-indexes" in sys.argv:
+        elif args.create_indexes:
             asyncio.run(create_indexes())
         else:
-            asyncio.run(main())
+            asyncio.run(main(args))
         logger.info("Pipeline finished successfully.")
     except Exception as e:
         logger.critical("Pipeline failed with an unhandled exception.", exc_info=True)

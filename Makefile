@@ -84,6 +84,14 @@ db-populate:
 	@echo "Running the data pipeline to populate the database..."
 	@python3 backend/data_pipeline/run_pipeline.py
 
+db-populate-recent:
+	@echo "Populating recent seasons only (configurable with START, END, MAX)..."
+	@python3 backend/data_pipeline/run_pipeline.py --start-season $(or $(START),2022) --end-season $(or $(END),2024) --max-games $(or $(MAX),500) --latest-first
+
+db-populate-sample:
+	@echo "Populating a small sample of games (configurable with MAX)..."
+	@python3 backend/data_pipeline/run_pipeline.py --start-season $(or $(START),2024) --end-season $(or $(END),2024) --max-games $(or $(MAX),100) --latest-first
+
 db-index:
 	@echo "Creating indexes in the db for better querying..."
 	@python3 backend/data_pipeline/run_pipeline.py --create-indexes
