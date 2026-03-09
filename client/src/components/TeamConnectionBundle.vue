@@ -25,7 +25,7 @@ defineProps<{
   
 <style scoped lang="postcss">
 .team-connections-bundle-container {
-    @apply flex flex-col justify-start items-center max-h-[120px] overflow-y-auto gap-1 p-2 h-full w-full;
+    @apply flex flex-col justify-start items-center max-h-[110px] overflow-y-auto gap-1 p-1 h-full w-fit max-w-[420px] mx-auto;
 }
 </style>
   

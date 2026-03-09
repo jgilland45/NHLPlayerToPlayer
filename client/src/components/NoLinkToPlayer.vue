@@ -19,15 +19,15 @@ defineProps<{
   
 <style scoped lang="postcss">
 .no-link-to-player-container {
-    @apply flex flex-row flex-auto justify-start items-center w-full border-2 border-solid border-black gap-1 h-[30px] p-1;
+    @apply flex flex-row flex-auto justify-start items-center w-full border-2 border-solid border-red-800 gap-2 min-h-[52px] p-3 rounded bg-red-700 text-white shadow-lg;
     .player-not-link {
-        @apply flex text-base whitespace-pre;
+        @apply flex text-lg whitespace-pre;
         .player-name {
-            @apply font-semibold;
+            @apply font-bold;
         }
     }
     .strike-icon {
-        @apply flex items-center text-red-700;
+        @apply flex items-center text-white text-2xl;
     }
 }
 </style>

@@ -25,6 +25,39 @@ GAME_TYPE_TO_REL_MAP = {
     "other": "TEAMMATE_IN_OTHER",
 }
 
+
+async def _resolve_db_game_types(game_types: Optional[List[str]]) -> Optional[List[str]]:
+    """
+    Maps user-facing game type values to DB relationship types and validates
+    they exist in the active Neo4j schema.
+    """
+    if not game_types:
+        return None
+
+    mapped_types: List[str] = []
+    for gt in game_types:
+        rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
+        if not rel_type:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}",
+            )
+        mapped_types.append(rel_type)
+
+    available_types = await getters.get_existing_relationship_types(mapped_types)
+    unavailable_types = [rel_type for rel_type in mapped_types if rel_type not in available_types]
+
+    if unavailable_types:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Requested game_type(s) are not available in this database: "
+                f"{unavailable_types}"
+            ),
+        )
+
+    return available_types
+
 @router.get("/", response_model=List[schemas.Player])
 async def get_all_players(db: GraphDB = Depends(get_graph_db)):
     """
@@ -45,17 +78,7 @@ async def get_random_player(
     """
     Returns a single random player, with optional filters for teams, years, and game types.
     """
-    db_game_types = None
-    if game_types:
-        db_game_types = []
-        for gt in game_types:
-            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
-            if not rel_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
-                )
-            db_game_types.append(rel_type)
+    db_game_types = await _resolve_db_game_types(game_types)
 
     player_record = await getters.get_random_player_with_filters(
         teams=teams,
@@ -104,17 +127,7 @@ async def get_player_teammates(
     if not player_name:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    db_game_types = None
-    if game_types:
-        db_game_types = []
-        for gt in game_types:
-            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
-            if not rel_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
-                )
-            db_game_types.append(rel_type)
+    db_game_types = await _resolve_db_game_types(game_types)
 
     teammates = await getters.get_teammates_of_player_with_options(
         playerid=player_id,
@@ -149,17 +162,7 @@ async def get_player_teams(
     if not player_name:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    db_game_types = None
-    if game_types:
-        db_game_types = []
-        for gt in game_types:
-            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
-            if not rel_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
-                )
-            db_game_types.append(rel_type)
+    db_game_types = await _resolve_db_game_types(game_types)
 
     teams = await getters.get_teams_from_playerid(
         playerid=player_id,
@@ -189,17 +192,7 @@ async def get_common_teams_for_players(
     if not p1_name or not p2_name:
         raise HTTPException(status_code=404, detail="One or both players not found")
 
-    db_game_types = None
-    if game_types:
-        db_game_types = []
-        for gt in game_types:
-            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
-            if not rel_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
-                )
-            db_game_types.append(rel_type)
+    db_game_types = await _resolve_db_game_types(game_types)
 
     teams = await getters.get_common_teams(
         player1_id=player1_id,
@@ -232,17 +225,7 @@ async def get_shortest_path(
     if not p1_name or not p2_name:
         raise HTTPException(status_code=404, detail="One or both players not found")
 
-    db_game_types = None
-    if game_types:
-        db_game_types = []
-        for gt in game_types:
-            rel_type = GAME_TYPE_TO_REL_MAP.get(gt.lower())
-            if not rel_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid game_type '{gt}'. Valid options are: {list(GAME_TYPE_TO_REL_MAP.keys())}"
-                )
-            db_game_types.append(rel_type)
+    db_game_types = await _resolve_db_game_types(game_types)
 
     path = await getters.find_shortest_path_between_players(
         player1_id=player1_id,

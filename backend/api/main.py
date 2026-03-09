@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from backend.db import session
-from backend.api.endpoints import players, battle
+from backend.api.endpoints import players, battle, path_game
 
 # run using `uvicorn backend.api.main:app --reload`
 
@@ -33,3 +33,4 @@ async def read_root():
 # Include routers from other files
 app.include_router(players.router, prefix="/players", tags=["players"])
 app.include_router(battle.router, tags=["battle"])
+app.include_router(path_game.router)

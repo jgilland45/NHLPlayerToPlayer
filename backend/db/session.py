@@ -16,13 +16,9 @@ class GraphDB:
         The actual synchronous database call, wrapped in a transactional
         unit of work that the driver can automatically retry on transient errors.
         """
-        def unit_of_work(tx, query, parameters):
-            result = tx.run(query, parameters)
-            # Consume the result inside the transaction to avoid issues.
-            return [record for record in result]
-
         with self._driver.session() as session:
-            return session.execute_write(unit_of_work, query, parameters)
+            result = session.run(query, parameters or {})
+            return [record for record in result]
 
     async def run_query(self, query, parameters=None):
         """Runs a query in a thread pool to avoid blocking the event loop."""

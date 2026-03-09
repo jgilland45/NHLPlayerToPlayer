@@ -1,3 +1,7 @@
+import logging
+import time
+import asyncio
+import random
 from typing import List, Dict, Any, Optional
 from backend.db.session import get_graph_db
 
@@ -6,9 +10,19 @@ from backend.db.session import get_graph_db
 from thefuzz import process
 from collections import defaultdict
 
+_DEFAULT_PATH_REL_TYPES = ["TEAMMATE_IN_REGULAR_SEASON", "TEAMMATE_IN_PLAYOFFS"]
+logger = logging.getLogger("uvicorn.error")
+
 def _year_to_season(year: int) -> int:
     """Converts a 4-digit year (e.g., 2023) to an 8-digit NHL season format (e.g., 20232024)."""
     return year * 10000 + (year + 1)
+
+
+def _season_to_label(season: int) -> str:
+    """Converts 8-digit season format (e.g., 20252026) to display label (2025-26)."""
+    start_year = season // 10000
+    end_year = season % 10000
+    return f"{start_year}-{str(end_year)[-2:]}"
 
 async def get_all_players() -> List[Dict[str, Any]]:
     db = get_graph_db()
@@ -27,6 +41,19 @@ async def get_all_playerids() -> List[int]:
     result = await db.run_query(query)
     return [record["playerid"] for record in result]
 
+
+async def get_playerids_sample(limit: int = 2000) -> List[int]:
+    """Returns a bounded sample of player IDs for fast in-memory random selection."""
+    db = get_graph_db()
+    query = """
+        MATCH (p:Player)
+        WHERE p.id IS NOT NULL
+        RETURN p.id AS playerid
+        LIMIT $limit
+    """
+    result = await db.run_query(query, {"limit": int(limit)})
+    return [record["playerid"] for record in result]
+
 async def get_all_teams() -> List[str]:
     db = get_graph_db()
     query = "MATCH ()-[r]->() WHERE r.team IS NOT NULL RETURN DISTINCT r.team AS teamid ORDER BY teamid"
@@ -39,6 +66,32 @@ async def get_all_games() -> List[int]:
     result = await db.run_query(query)
     return [record["gameid"] for record in result]
 
+
+async def get_existing_relationship_types(candidate_types: Optional[List[str]] = None) -> List[str]:
+    """
+    Returns relationship types currently present in the database.
+    If candidate_types is provided, only matching types are returned.
+    """
+    db = get_graph_db()
+    query = "CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType"
+    try:
+        # Schema introspection can occasionally stall; fail fast and fall back.
+        result = await asyncio.wait_for(db.run_query(query), timeout=2.0)
+    except asyncio.TimeoutError:
+        logger.error("Timed out fetching relationship types from Neo4j schema")
+        return candidate_types or []
+    except Exception:
+        logger.exception("Failed fetching relationship types from Neo4j schema")
+        return candidate_types or []
+
+    existing = [record["relationshipType"] for record in result]
+
+    if candidate_types is None:
+        return existing
+
+    candidate_set = set(candidate_types)
+    return [rel_type for rel_type in existing if rel_type in candidate_set]
+
 async def get_year_of_most_recent_game_played() -> Optional[str]:
     db = get_graph_db()
     query = "MATCH ()-[r]->() WHERE r.gameId IS NOT NULL RETURN r.gameId AS gameId ORDER BY gameId DESC LIMIT 1"
@@ -50,15 +103,42 @@ async def get_year_of_most_recent_game_played() -> Optional[str]:
 
 async def get_random_playerid() -> Optional[int]:
     db = get_graph_db()
-    query = """
+    bounds_query = """
         MATCH (p:Player)
-        WITH p, rand() AS r
-        ORDER BY r
-        LIMIT 1
-        RETURN p.id AS playerid
+        WHERE p.id IS NOT NULL
+        RETURN min(p.id) AS min_id, max(p.id) AS max_id
     """
-    result = await db.run_query(query)
-    return result[0]["playerid"] if result else None
+    bounds = await db.run_query(bounds_query)
+    if not bounds or bounds[0]["min_id"] is None or bounds[0]["max_id"] is None:
+        return None
+
+    min_id = int(bounds[0]["min_id"])
+    max_id = int(bounds[0]["max_id"])
+    if max_id < min_id:
+        return None
+
+    random_target = min_id + int((max_id - min_id + 1) * random.random())
+
+    forward_query = """
+        MATCH (p:Player)
+        WHERE p.id >= $target_id
+        RETURN p.id AS playerid
+        ORDER BY p.id
+        LIMIT 1
+    """
+    result = await db.run_query(forward_query, {"target_id": random_target})
+    if result:
+        return result[0]["playerid"]
+
+    wrap_query = """
+        MATCH (p:Player)
+        WHERE p.id IS NOT NULL
+        RETURN p.id AS playerid
+        ORDER BY p.id
+        LIMIT 1
+    """
+    wrap_result = await db.run_query(wrap_query)
+    return wrap_result[0]["playerid"] if wrap_result else None
 
 async def get_random_playerid_from_team_and_years(tricode: str, loweryear: int, upperyear: int) -> Optional[int]:
     db = get_graph_db()
@@ -117,7 +197,7 @@ async def get_random_player_with_filters(
     Gets a random player (ID and name) based on a combination of optional filters.
     """
     db = get_graph_db()
-    params = {}
+    params: Dict[str, Any] = {}
 
     rel_type_str = ""
     if game_types:
@@ -158,7 +238,7 @@ async def get_random_player_with_filters(
             END AS random_player
     """
     result = await db.run_query(query, params)
-    return result[0] if result else None
+    return dict(result[0]) if result else None
 
 async def get_all_teammates_of_player(playerid: int) -> List[Dict[str, Any]]:
     db = get_graph_db()
@@ -181,7 +261,7 @@ async def get_teammates_of_player_with_options(
     Finds all teammates of a player, with optional filters for teams, years, and game types.
     """
     db = get_graph_db()
-    params = {"playerid": playerid}
+    params: Dict[str, Any] = {"playerid": playerid}
 
     # Build the relationship type string for the query, e.g., ":TEAMMATE_IN_REGULAR_SEASON|TEAMMATE_IN_PLAYOFFS"
     rel_type_str = ""
@@ -219,7 +299,7 @@ async def get_common_teams(
 ) -> List[str]:
     """Finds all teams where two players were teammates, with optional filters."""
     db = get_graph_db()
-    params = {"p1_id": player1_id, "p2_id": player2_id}
+    params: Dict[str, Any] = {"p1_id": player1_id, "p2_id": player2_id}
 
     # Build the relationship type string for the query
     rel_type_str = ""
@@ -246,23 +326,56 @@ async def get_common_teams(
     result = await db.run_query(query, params)
     return [record["teamid"] for record in result]
 
+
+async def get_common_team_seasons(
+    player1_id: int,
+    player2_id: int,
+    game_types: Optional[List[str]] = None,
+) -> List[str]:
+    """Returns distinct common teammate links as 'TEAM YYYY-YY' labels."""
+    db = get_graph_db()
+    params: Dict[str, Any] = {"p1_id": player1_id, "p2_id": player2_id}
+
+    rel_type_str = ""
+    if game_types:
+        rel_type_str = f":{'|'.join(game_types)}"
+
+    query = f"""
+        MATCH (p1:Player {{id: $p1_id}})-[r{rel_type_str}]-(p2:Player {{id: $p2_id}})
+        WHERE r.team IS NOT NULL AND r.season IS NOT NULL
+        RETURN DISTINCT r.team AS teamid, r.season AS season
+        ORDER BY season DESC, teamid ASC
+    """
+    result = await db.run_query(query, params)
+    return [f"{record['teamid']} {_season_to_label(int(record['season']))}" for record in result]
+
 async def get_reg_and_playoff_teammates_of_player(playerid: int) -> List[int]:
     """Finds all teammates of a player from regular season and playoff games only."""
     db = get_graph_db()
+    rel_types = await get_existing_relationship_types(_DEFAULT_PATH_REL_TYPES)
+    if not rel_types:
+        return []
+
+    rel_pattern = "|".join(rel_types)
     query = """
-        MATCH (p1:Player {id: $playerid})-[:TEAMMATE_IN_REGULAR_SEASON|:TEAMMATE_IN_PLAYOFFS]-(p2:Player)
+        MATCH (p1:Player {id: $playerid})-[:%s]-(p2:Player)
         RETURN DISTINCT p2.id AS playerid
-    """
+    """ % rel_pattern
     result = await db.run_query(query, {"playerid": playerid})
     return [record["playerid"] for record in result]
 
 async def get_reg_and_playoff_common_teams(player1_id: int, player2_id: int) -> List[str]:
     """Finds common teams for two players, but only from regular season and playoff games."""
     db = get_graph_db()
+    rel_types = await get_existing_relationship_types(_DEFAULT_PATH_REL_TYPES)
+    if not rel_types:
+        return []
+
+    rel_pattern = "|".join(rel_types)
     query = """
-        MATCH (p1:Player {id: $p1_id})-[r:TEAMMATE_IN_REGULAR_SEASON|:TEAMMATE_IN_PLAYOFFS]-(p2:Player {id: $p2_id})
+        MATCH (p1:Player {id: $p1_id})-[r:%s]-(p2:Player {id: $p2_id})
         RETURN DISTINCT r.team AS teamid
-    """
+    """ % rel_pattern
     params = {"p1_id": player1_id, "p2_id": player2_id}
     result = await db.run_query(query, params)
     return [record["teamid"] for record in result]
@@ -314,7 +427,7 @@ async def get_teams_from_playerid(
 ) -> List[str]:
     """Gets all unique team tricodes a player has played for, with optional filters."""
     db = get_graph_db()
-    params = {"playerid": playerid}
+    params: Dict[str, Any] = {"playerid": playerid}
 
     # Build the relationship type string for the query, e.g., ":TEAMMATE_IN_REGULAR_SEASON|TEAMMATE_IN_PLAYOFFS"
     rel_type_str = ""
@@ -349,6 +462,7 @@ async def find_shortest_path_between_players(
     game_types: Optional[List[str]] = None,
     include_players: Optional[List[int]] = None,
     exclude_players: Optional[List[int]] = None,
+    max_hops: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Finds the shortest path between two players using APOC expandConfig,
@@ -357,14 +471,18 @@ async def find_shortest_path_between_players(
     """
     db = get_graph_db()
 
-    rel_types = game_types or ["TEAMMATE_IN_REGULAR_SEASON", "TEAMMATE_IN_PLAYOFFS"]
+    if game_types:
+        rel_types = await get_existing_relationship_types(game_types)
+    else:
+        rel_types = await get_existing_relationship_types(_DEFAULT_PATH_REL_TYPES)
 
-    # Start building relationshipFilter string with direction
+    if not rel_types:
+        return []
+
     rel_filter = "|".join(rel_types) + ">"
 
-    # Append year filters directly on relationship properties in the filter
     year_filters = []
-    params = {
+    params: Dict[str, Any] = {
         "p1_id": player1_id,
         "p2_id": player2_id,
         "exclude_players": exclude_players or [],
@@ -373,19 +491,21 @@ async def find_shortest_path_between_players(
 
     if start_year is not None:
         params["start_year"] = _year_to_season(start_year)
-        year_filters.append(f"r.season >= $start_year")
+        year_filters.append("r.season >= $start_year")
     if end_year is not None:
         params["end_year"] = _year_to_season(end_year)
-        year_filters.append(f"r.season <= $end_year")
+        year_filters.append("r.season <= $end_year")
 
     if year_filters:
         rel_filter += " AND " + " AND ".join(year_filters)
 
+    max_level_line = f"maxLevel: {int(max_hops)}," if max_hops is not None else ""
     query = f"""
     MATCH (start:Player {{id: $p1_id}}), (end:Player {{id: $p2_id}})
     CALL apoc.path.expandConfig(start, {{
       relationshipFilter: "{rel_filter}",
       minLevel: 1,
+      {max_level_line}
       terminatorNodes: [end],
       whitelistNodes: $include_players,
       blacklistNodes: $exclude_players,
@@ -397,8 +517,8 @@ async def find_shortest_path_between_players(
     ORDER BY length(path)
     LIMIT 1
     """
-    print(query)
-    print(params)
+
+    logger.debug("Running shortest-path query p1=%s p2=%s rel_types=%s max_hops=%s", player1_id, player2_id, rel_types, max_hops)
 
     result = await db.run_query(query, params)
     if not result:
@@ -413,3 +533,104 @@ async def find_shortest_path_between_players(
             return []  # No path includes all required players
 
     return path_nodes
+
+
+async def get_random_connected_player_for_start(
+    start_player_id: int,
+    game_types: Optional[List[str]] = None,
+    min_hops: int = 2,
+    max_hops: int = 6,
+    sample_limit: int = 300,
+) -> Optional[Dict[str, Any]]:
+    """
+    Returns a random player connected to the given start player within bounded
+    hop distance. Uses APOC path expansion with a hard sample limit to avoid
+    explosive variable-length traversals.
+    """
+    started = time.perf_counter()
+    db = get_graph_db()
+    if game_types:
+        rel_types = await get_existing_relationship_types(game_types)
+    else:
+        rel_types = await get_existing_relationship_types(_DEFAULT_PATH_REL_TYPES)
+
+    if not rel_types:
+        logger.warning("No relationship types available for connected-player lookup")
+        return None
+
+    rel_filter = "|".join(rel_types)
+    query = """
+        MATCH (start:Player {id: $start_player_id})
+        CALL apoc.path.expandConfig(start, {
+            relationshipFilter: $rel_filter,
+            minLevel: $min_hops,
+            maxLevel: $max_hops,
+            bfs: true,
+            uniqueness: 'NODE_GLOBAL',
+            filterStartNode: true,
+            limit: $sample_limit
+        })
+        YIELD path
+        WITH last(nodes(path)) AS end
+        WHERE end.fullName IS NOT NULL AND end.id <> $start_player_id
+        WITH DISTINCT end
+        ORDER BY rand()
+        LIMIT 1
+        RETURN end.id AS id, end.fullName AS full_name
+    """
+
+    params = {
+        "start_player_id": start_player_id,
+        "rel_filter": rel_filter,
+        "min_hops": min_hops,
+        "max_hops": max_hops,
+        "sample_limit": sample_limit,
+    }
+
+    logger.info(
+        "Connected-player lookup start player=%s hops=%s..%s sample_limit=%s rel_types=%s",
+        start_player_id,
+        min_hops,
+        max_hops,
+        sample_limit,
+        rel_types,
+    )
+
+    result = await db.run_query(query, params)
+    logger.info(
+        "Connected-player lookup finished player=%s result_count=%s elapsed=%.3fs",
+        start_player_id,
+        len(result),
+        time.perf_counter() - started,
+    )
+
+    if not result:
+        return None
+    return {"id": result[0]["id"], "full_name": result[0]["full_name"]}
+
+
+async def find_shortest_path_for_game(
+    player1_id: int,
+    player2_id: int,
+    max_hops: int = 6,
+) -> List[Dict[str, Any]]:
+    """
+    Bounded shortest-path lookup for game mode.
+    Uses built-in shortestPath with a strict hop cap to avoid large APOC expansions.
+    """
+    db = get_graph_db()
+    bounded_hops = max(1, int(max_hops))
+    query = """
+        MATCH (start:Player {id: $p1_id}), (end:Player {id: $p2_id})
+        MATCH p = shortestPath((start)-[:TEAMMATE_IN_REGULAR_SEASON*..%d]-(end))
+        RETURN [n IN nodes(p) | {id: n.id, full_name: n.fullName}] AS path_nodes
+        LIMIT 1
+    """ % bounded_hops
+    params: Dict[str, Any] = {
+        "p1_id": player1_id,
+        "p2_id": player2_id,
+    }
+    result = await db.run_query(query, params)
+    if not result:
+        return []
+    return result[0]["path_nodes"]

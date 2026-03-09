@@ -40,21 +40,21 @@ const imageLoadError = (e: any) => {
   
 <style scoped lang="postcss">
 .team-connections-container {
-    @apply flex flex-row flex-auto justify-start items-center w-full border-2 border-solid border-black gap-1 h-[30px];
+    @apply flex flex-row items-center w-full border-2 border-solid border-black gap-1 h-[26px] px-1;
     .link-icon {
-        @apply flex items-center justify-center w-[30px] min-w-[25px];
+        @apply flex items-center justify-center w-[20px] min-w-[20px];
     }
     .team-name {
-        @apply flex text-base;
+        @apply flex text-[11px] leading-none whitespace-nowrap overflow-hidden text-ellipsis;
     }
     .team-logo {
-        @apply w-[30px] h-[30px] min-w-[25px] min-h-[25px];
+        @apply w-[18px] h-[18px] min-w-[18px] min-h-[18px];
         .team-logo-img {
             @apply h-full w-full;
         }
     }
     .strikes {
-        @apply flex ml-auto;
+        @apply flex ml-auto pl-1;
         .strikes-icons {
             @apply flex flex-row justify-center items-center;
             .strike-icon {
