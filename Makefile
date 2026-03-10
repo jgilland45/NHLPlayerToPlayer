@@ -40,6 +40,7 @@ db-up:
 		-e NEO4J_server_memory_heap_initial__size=512m \
 		-e NEO4J_server_memory_heap_max__size=1024m \
 		-e NEO4J_server_memory_pagecache_size=512m \
+		-e NEO4J_dbms_memory_transaction_total_max=768m \
 		-e NEO4J_dbms_security_procedures_unrestricted=apoc.* \
 		-e NEO4JLABS_PLUGINS='["apoc"]' \
 		neo4j:latest

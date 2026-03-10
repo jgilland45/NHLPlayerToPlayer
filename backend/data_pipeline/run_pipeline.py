@@ -59,8 +59,18 @@ async def create_indexes():
     logger.info("--- Ensuring database indexes are created ---")
     db = session.get_graph_db()
 
-    # Index on Player ID for fast lookups
-    await db.run_query("CREATE INDEX player_id_index IF NOT EXISTS FOR (p:Player) ON (p.id)")
+    # Enforce canonical player identity. This also creates the backing index.
+    # If this fails, the graph currently has duplicate Player.id values that must be deduplicated.
+    try:
+        await db.run_query(
+            "CREATE CONSTRAINT player_id_unique IF NOT EXISTS FOR (p:Player) REQUIRE p.id IS UNIQUE"
+        )
+    except Exception:
+        logger.error(
+            "Failed creating player_id_unique constraint. Resolve duplicate Player.id nodes first, then rerun --create-indexes.",
+            exc_info=True,
+        )
+        raise
 
     # To get all possible relationship types, we can inspect the mapping
     # dictionary in the `_get_relationship_type_from_game_id` function.
@@ -90,7 +100,58 @@ async def clear_database():
     """Deletes all nodes and relationships from the Neo4j database."""
     logger.info("--- Clearing the entire Neo4j database ---")
     db = session.get_graph_db()
-    await db.run_query("MATCH (n) DETACH DELETE n")
+
+    # Phase 1: delete relationships first. This avoids high-memory DETACH operations.
+    rel_batch_size = 1000
+    total_relationships_deleted = 0
+
+    while True:
+        result = await db.run_query(
+            """
+            MATCH ()-[r]-()
+            WITH r LIMIT $batch_size
+            DELETE r
+            RETURN count(r) AS deleted
+            """,
+            parameters={"batch_size": rel_batch_size},
+        )
+
+        deleted = int(result[0]["deleted"]) if result else 0
+        total_relationships_deleted += deleted
+
+        if deleted == 0:
+            break
+
+        logger.info("Deleted %s relationships so far...", total_relationships_deleted)
+
+    # Phase 2: delete remaining isolated nodes.
+    node_batch_size = 5000
+    total_nodes_deleted = 0
+
+    while True:
+        result = await db.run_query(
+            """
+            MATCH (n)
+            WITH n LIMIT $batch_size
+            DELETE n
+            RETURN count(n) AS deleted
+            """,
+            parameters={"batch_size": node_batch_size},
+        )
+
+        deleted = int(result[0]["deleted"]) if result else 0
+        total_nodes_deleted += deleted
+
+        if deleted == 0:
+            break
+
+        logger.info("Deleted %s nodes so far...", total_nodes_deleted)
+
+    logger.info(
+        "Deleted %s relationships and %s nodes in total.",
+        total_relationships_deleted,
+        total_nodes_deleted,
+    )
     logger.info("Database cleared successfully.")
 
 async def get_existing_game_ids(db: session.GraphDB) -> set[int]:

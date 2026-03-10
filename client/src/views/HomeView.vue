@@ -188,14 +188,67 @@ const pathConnections = ref<TeamConnection[][]>([]);
 const noLinkPopups = ref<PopupEntry[]>([]);
 const popupCounter = ref(0);
 const yourPathScrollRef = ref<HTMLElement | null>(null);
+const teamInfoCache = new Map<string, Promise<TeamConnection>>();
 
 const getPlayerImage = (playerId: number) => `https://assets.nhle.com/mugs/nhl/latest/${playerId}.png`;
-const getTeamLogoFromLabel = (teamSeasonLabel: string) => {
-  const tricode = teamSeasonLabel.split(' ')[0]?.toUpperCase();
-  if (!tricode || tricode.length !== 3) {
+
+const normalizeSeasonToEightDigits = (seasonText: string): string => {
+  const raw = seasonText.trim();
+  if (/^\d{8}$/.test(raw)) {
+    return raw;
+  }
+  const seasonMatch = raw.match(/^(\d{4})-(\d{2})$/);
+  if (!seasonMatch) {
     return '';
   }
-  return `https://assets.nhle.com/logos/nhl/svg/${tricode}_dark.svg`;
+  const startYear = seasonMatch[1];
+  const endYearShort = seasonMatch[2];
+  const centuryPrefix = startYear.slice(0, 2);
+  return `${startYear}${centuryPrefix}${endYearShort}`;
+};
+
+const getTeamConnection = async (teamLabel: string): Promise<TeamConnection> => {
+  const [triCodeRaw, seasonRaw] = teamLabel.trim().split(' ');
+  const tri_code = (triCodeRaw ?? '').toUpperCase();
+  const years = normalizeSeasonToEightDigits(seasonRaw ?? '');
+
+  if (tri_code.length !== 3 || years.length !== 8) {
+    return {
+      teamName: teamLabel,
+      numStrikes: 0,
+      teamLogoURL: `https://assets.nhle.com/logos/nhl/svg/${tri_code || 'NHL'}_dark.svg`,
+    };
+  }
+
+  let logo = `https://assets.nhle.com/logos/nhl/svg/${tri_code}_dark.svg`;
+  let name = tri_code;
+
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/team/logo?team_tricode=${tri_code}&year=${years}`);
+    if (res.ok) {
+      const data = await res.json();
+      logo = typeof data?.logo === 'string' && data.logo.length > 0 ? data.logo : logo;
+      name = typeof data?.name === 'string' && data.name.length > 0 ? data.name : name;
+    }
+  } catch {
+    // Keep default logo/name fallback on network/API failures.
+  }
+
+  return {
+    teamName: `${name} ${years.slice(0, 4)}-${years.slice(6, 8)}`,
+    numStrikes: 0,
+    teamLogoURL: logo,
+  };
+};
+
+const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnection[]> => {
+  const lookups = teams.map((teamLabel) => {
+    if (!teamInfoCache.has(teamLabel)) {
+      teamInfoCache.set(teamLabel, getTeamConnection(teamLabel));
+    }
+    return teamInfoCache.get(teamLabel)!;
+  });
+  return Promise.all(lookups);
 };
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -287,11 +340,7 @@ const submitGuess = async (player: SearchPlayer) => {
     statusMessage.value = data.message;
 
     if (data.valid && Array.isArray(data.last_step_teams) && data.last_step_teams.length > 0) {
-      const mappedConnections = data.last_step_teams.map((teamLabel: string) => ({
-        teamName: teamLabel,
-        numStrikes: 0,
-        teamLogoURL: getTeamLogoFromLabel(teamLabel),
-      }));
+      const mappedConnections = await getTeamInfoFromCommonTeams(data.last_step_teams);
       pathConnections.value.push(mappedConnections);
       await scrollYourPathToBottom();
     }
@@ -348,13 +397,7 @@ const showOptimalSolution = async () => {
     optimalPath.value = data.shortest_path;
     shortestPathLength.value = data.shortest_path_length;
     optimalConnections.value = Array.isArray(data.optimal_step_teams)
-      ? data.optimal_step_teams.map((stepLinks: string[]) =>
-          stepLinks.map((teamLabel: string) => ({
-            teamName: teamLabel,
-            numStrikes: 0,
-            teamLogoURL: getTeamLogoFromLabel(teamLabel),
-          })),
-        )
+      ? await Promise.all(data.optimal_step_teams.map((stepLinks: string[]) => getTeamInfoFromCommonTeams(stepLinks)))
       : [];
     statusMessage.value = 'Optimal solution loaded.';
   } catch (error) {
