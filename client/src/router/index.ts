@@ -20,12 +20,17 @@ const router = createRouter({
     {
       path: '/singleplayer',
       name: 'singleplayer',
-      component: () => import('../components/SinglePlayerGame.vue'),
+      component: () => import('../views/SinglePlayerView.vue'),
     },
     {
       path: '/multiplayer',
       name: 'multiplayer',
-      component: () => import('../components/MultiPlayerGame.vue'),
+      component: () => import('../views/MultiPlayerHomeView.vue'),
+    },
+    {
+      path: '/multiplayer/:code',
+      name: 'multiplayer-lobby',
+      component: () => import('../views/MultiPlayerLobbyView.vue'),
     },
   ],
 })
