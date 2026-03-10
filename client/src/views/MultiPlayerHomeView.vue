@@ -58,6 +58,7 @@ import { RouterLink, useRouter } from 'vue-router';
 const router = useRouter();
 const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://127.0.0.1:8000';
 const REQUEST_TIMEOUT_MS = 15000;
+const CREATE_LOBBY_REQUEST_TIMEOUT_MS = 60000;
 
 const creatingLobby = ref(false);
 const joinCode = ref('');
@@ -65,9 +66,13 @@ const errorBanner = ref<string | null>(null);
 
 const normalizedJoinCode = computed(() => joinCode.value.trim().toUpperCase());
 
-const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, {
       ...init,
@@ -82,17 +87,25 @@ const createLobby = async () => {
   creatingLobby.value = true;
   errorBanner.value = null;
   try {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/game/multiplayer/lobbies`, {
-      method: 'POST',
-    });
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/game/multiplayer/lobbies`,
+      {
+        method: 'POST',
+      },
+      CREATE_LOBBY_REQUEST_TIMEOUT_MS,
+    );
     if (!response.ok) {
       throw new Error('Failed to create lobby');
     }
 
     const data = await response.json();
     const code = String(data.code ?? '').toUpperCase();
+    const creatorToken = String(data.creator_token ?? '');
     if (!code) {
       throw new Error('Created lobby is missing a code');
+    }
+    if (creatorToken) {
+      localStorage.setItem(`nhl-player-to-player-creator-token-${code}`, creatorToken);
     }
     await router.push(`/multiplayer/${code}`);
   } catch (error) {

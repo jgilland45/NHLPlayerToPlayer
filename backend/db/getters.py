@@ -8,7 +8,7 @@ from backend.db.session import get_graph_db
 # NOTE: This adds a dependency on `thefuzz` library for fuzzy string matching.
 # You may need to install it: pip install "thefuzz[speedup]"
 from thefuzz import process
-from collections import defaultdict
+from collections import defaultdict, deque
 
 _DEFAULT_PATH_REL_TYPES = ["TEAMMATE_IN_REGULAR_SEASON", "TEAMMATE_IN_PLAYOFFS"]
 logger = logging.getLogger("uvicorn.error")
@@ -65,6 +65,32 @@ async def get_all_games() -> List[int]:
     query = "MATCH ()-[r]->() WHERE r.gameId IS NOT NULL RETURN DISTINCT r.gameId AS gameid"
     result = await db.run_query(query)
     return [record["gameid"] for record in result]
+
+
+async def get_season_year_bounds() -> Optional[Dict[str, int]]:
+    """
+    Returns the min/max available season start years from relationship data.
+    Example: season 20232024 returns year 2023.
+    """
+    db = get_graph_db()
+    query = """
+        MATCH ()-[r]-()
+        WHERE r.season IS NOT NULL
+        RETURN min(r.season) AS min_season, max(r.season) AS max_season
+    """
+    result = await db.run_query(query)
+    if not result:
+        return None
+
+    min_season = result[0].get("min_season")
+    max_season = result[0].get("max_season")
+    if min_season is None or max_season is None:
+        return None
+
+    return {
+        "min_year": int(min_season) // 10000,
+        "max_year": int(max_season) // 10000,
+    }
 
 
 async def get_existing_relationship_types(candidate_types: Optional[List[str]] = None) -> List[str]:
@@ -218,27 +244,20 @@ async def get_random_player_with_filters(
     if where_clauses:
         where_str = "WHERE " + " AND ".join(where_clauses)
 
-    # This is a highly performant single-query method to get a random player.
-    # 1. Find all players matching the filters.
-    # 2. Use `WITH DISTINCT p` to immediately deduplicate them.
-    # 3. Collect the unique players into a list.
-    # 4. Return a single random player from that list using a random index.
-    # This avoids a slow `count(DISTINCT ...)` and a second `SKIP/LIMIT` query.
+    # Select a random distinct player directly, without collecting all matches
+    # into memory. This keeps memory usage bounded for broad filter sets.
     query = f"""
         MATCH (p:Player)-[r{rel_type_str}]-()
         {where_str}
-        WITH DISTINCT p
-        WITH collect(p) as players
-        // Return null if no players are found to avoid errors.
-        RETURN
-            CASE
-                WHEN size(players) > 0
-                THEN players[toInteger(rand() * size(players))]
-                ELSE null
-            END AS random_player
+        WITH DISTINCT p, rand() AS random_value
+        ORDER BY random_value
+        LIMIT 1
+        RETURN p AS random_player
     """
     result = await db.run_query(query, params)
-    return dict(result[0]) if result else None
+    if not result:
+        return {"random_player": None}
+    return {"random_player": result[0]["random_player"]}
 
 async def get_all_teammates_of_player(playerid: int) -> List[Dict[str, Any]]:
     db = get_graph_db()
@@ -330,6 +349,9 @@ async def get_common_teams(
 async def get_common_team_seasons(
     player1_id: int,
     player2_id: int,
+    teams: Optional[List[str]] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
     game_types: Optional[List[str]] = None,
 ) -> List[str]:
     """Returns distinct common teammate links as 'TEAM YYYY-YY' labels."""
@@ -340,9 +362,20 @@ async def get_common_team_seasons(
     if game_types:
         rel_type_str = f":{'|'.join(game_types)}"
 
+    where_clauses = ["r.team IS NOT NULL", "r.season IS NOT NULL"]
+    if teams:
+        where_clauses.append("r.team IN $teams")
+        params["teams"] = [team.upper() for team in teams]
+    if start_year is not None:
+        where_clauses.append("r.season >= $start_year")
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        where_clauses.append("r.season <= $end_year")
+        params["end_year"] = _year_to_season(end_year)
+
     query = f"""
         MATCH (p1:Player {{id: $p1_id}})-[r{rel_type_str}]-(p2:Player {{id: $p2_id}})
-        WHERE r.team IS NOT NULL AND r.season IS NOT NULL
+        WHERE {" AND ".join(where_clauses)}
         RETURN DISTINCT r.team AS teamid, r.season AS season
         ORDER BY season DESC, teamid ASC
     """
@@ -537,6 +570,9 @@ async def find_shortest_path_between_players(
 
 async def get_random_connected_player_for_start(
     start_player_id: int,
+    teams: Optional[List[str]] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
     game_types: Optional[List[str]] = None,
     min_hops: int = 2,
     max_hops: int = 6,
@@ -559,6 +595,18 @@ async def get_random_connected_player_for_start(
         return None
 
     rel_filter = "|".join(rel_types)
+    relationship_predicates = ["rel.team IS NOT NULL", "rel.season IS NOT NULL"]
+    if teams:
+        relationship_predicates.append("rel.team IN $teams")
+    if start_year is not None:
+        relationship_predicates.append("rel.season >= $start_year")
+    if end_year is not None:
+        relationship_predicates.append("rel.season <= $end_year")
+
+    path_filter = ""
+    if relationship_predicates:
+        path_filter = f" AND all(rel IN relationships(path) WHERE {' AND '.join(relationship_predicates)})"
+
     query = """
         MATCH (start:Player {id: $start_player_id})
         CALL apoc.path.expandConfig(start, {
@@ -571,8 +619,11 @@ async def get_random_connected_player_for_start(
             limit: $sample_limit
         })
         YIELD path
-        WITH last(nodes(path)) AS end
+        WITH path, last(nodes(path)) AS end
         WHERE end.fullName IS NOT NULL AND end.id <> $start_player_id
+    """
+    query += path_filter
+    query += """
         WITH DISTINCT end
         ORDER BY rand()
         LIMIT 1
@@ -586,6 +637,12 @@ async def get_random_connected_player_for_start(
         "max_hops": max_hops,
         "sample_limit": sample_limit,
     }
+    if teams:
+        params["teams"] = [team.upper() for team in teams]
+    if start_year is not None:
+        params["start_year"] = _year_to_season(start_year)
+    if end_year is not None:
+        params["end_year"] = _year_to_season(end_year)
 
     logger.info(
         "Connected-player lookup start player=%s hops=%s..%s sample_limit=%s rel_types=%s",
@@ -612,25 +669,85 @@ async def get_random_connected_player_for_start(
 async def find_shortest_path_for_game(
     player1_id: int,
     player2_id: int,
+    teams: Optional[List[str]] = None,
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
+    game_types: Optional[List[str]] = None,
     max_hops: int = 6,
 ) -> List[Dict[str, Any]]:
     """
-    Bounded shortest-path lookup for game mode.
-    Uses built-in shortestPath with a strict hop cap to avoid large APOC expansions.
+    Bounded shortest path for game mode with optional relationship filters.
+    Uses in-process BFS to avoid APOC heap blowups on dense filtered graphs.
     """
-    db = get_graph_db()
     bounded_hops = max(1, int(max_hops))
-    query = """
-        MATCH (start:Player {id: $p1_id}), (end:Player {id: $p2_id})
-        MATCH p = shortestPath((start)-[:TEAMMATE_IN_REGULAR_SEASON*..%d]-(end))
-        RETURN [n IN nodes(p) | {id: n.id, full_name: n.fullName}] AS path_nodes
-        LIMIT 1
-    """ % bounded_hops
-    params: Dict[str, Any] = {
-        "p1_id": player1_id,
-        "p2_id": player2_id,
-    }
-    result = await db.run_query(query, params)
-    if not result:
+    max_visited_nodes = 40000
+
+    if player1_id == player2_id:
+        name = await get_name_from_playerid(player1_id)
+        return [{"id": player1_id, "full_name": name}] if name else []
+
+    start_name, end_name = await asyncio.gather(
+        get_name_from_playerid(player1_id),
+        get_name_from_playerid(player2_id),
+    )
+    if not start_name or not end_name:
         return []
-    return result[0]["path_nodes"]
+
+    queue = deque([(int(player1_id), 0)])
+    parent_by_node: Dict[int, Optional[int]] = {int(player1_id): None}
+    name_by_node: Dict[int, str] = {
+        int(player1_id): start_name,
+        int(player2_id): end_name,
+    }
+
+    while queue:
+        current_id, depth = queue.popleft()
+        if depth >= bounded_hops:
+            continue
+
+        neighbors = await get_teammates_of_player_with_options(
+            playerid=current_id,
+            teams=teams,
+            start_year=start_year,
+            end_year=end_year,
+            game_types=game_types,
+        )
+
+        for neighbor in neighbors:
+            neighbor_id = int(neighbor["id"])
+            if neighbor_id in parent_by_node:
+                continue
+
+            parent_by_node[neighbor_id] = current_id
+            neighbor_name = neighbor.get("full_name")
+            if isinstance(neighbor_name, str) and neighbor_name:
+                name_by_node[neighbor_id] = neighbor_name
+
+            if len(parent_by_node) > max_visited_nodes:
+                logger.warning(
+                    "Aborting shortest-path BFS p1=%s p2=%s visited_nodes>%s",
+                    player1_id,
+                    player2_id,
+                    max_visited_nodes,
+                )
+                return []
+
+            if neighbor_id == int(player2_id):
+                path_ids: List[int] = []
+                cursor: Optional[int] = neighbor_id
+                while cursor is not None:
+                    path_ids.append(cursor)
+                    cursor = parent_by_node[cursor]
+                path_ids.reverse()
+
+                resolved_path: List[Dict[str, Any]] = []
+                for path_id in path_ids:
+                    full_name = name_by_node.get(path_id)
+                    if not full_name:
+                        full_name = await get_name_from_playerid(path_id) or str(path_id)
+                    resolved_path.append({"id": path_id, "full_name": full_name})
+                return resolved_path
+
+            queue.append((neighbor_id, depth + 1))
+
+    return []

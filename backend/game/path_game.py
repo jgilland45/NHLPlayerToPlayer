@@ -1,14 +1,18 @@
 import logging
 import time
-import random
-import asyncio
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from backend.db import getters
+from backend.game.connection_settings import (
+    DEFAULT_RELATIONSHIP_TYPES,
+    ResolvedConnectionSettings,
+    get_connection_settings_options,
+    resolve_connection_settings,
+    serialize_resolved_connection_settings,
+)
 
-_ALLOWED_GAME_TYPES = ["TEAMMATE_IN_REGULAR_SEASON", "TEAMMATE_IN_PLAYOFFS"]
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -18,7 +22,7 @@ class PathGameSession:
     start_player: Dict[str, Any]
     end_player: Dict[str, Any]
     current_path: List[Dict[str, Any]]
-    relationship_types: List[str]
+    connection_settings: ResolvedConnectionSettings
     completed: bool = False
 
 
@@ -27,79 +31,63 @@ class PathGameService:
 
     def __init__(self):
         self._sessions: Dict[str, PathGameSession] = {}
-        self._start_player_pool: List[int] = []
 
-    async def _ensure_start_player_pool(self, min_size: int = 200) -> None:
-        if len(self._start_player_pool) >= min_size:
-            return
+    async def get_settings_options(self) -> Dict[str, Any]:
+        return await get_connection_settings_options(default_relationship_types=DEFAULT_RELATIONSHIP_TYPES)
 
-        logger.info("Loading start player pool for path game")
-        try:
-            sampled_ids = await asyncio.wait_for(getters.get_playerids_sample(limit=600), timeout=3.0)
-        except Exception:
-            logger.exception("Failed loading start player pool")
-            raise ValueError("Database unavailable while loading player pool")
-
-        self._start_player_pool = [int(player_id) for player_id in sampled_ids if player_id is not None]
-        logger.info("Loaded start player pool size=%s", len(self._start_player_pool))
-
-    async def _resolve_game_types(self) -> List[str]:
-        # Game mode uses regular-season edges only for predictable performance.
-        resolved_types = ["TEAMMATE_IN_REGULAR_SEASON"]
-        logger.info("Resolved relationship types for game: %s", resolved_types)
-        return resolved_types
-
-    async def start_game(self, max_attempts: int = 25) -> PathGameSession:
+    async def start_game(
+        self,
+        requested_settings: Optional[Dict[str, Any]] = None,
+        max_attempts: int = 25,
+    ) -> PathGameSession:
         start_time = time.perf_counter()
         logger.info("Starting new path game generation (max_attempts=%s)", max_attempts)
-        game_types = await self._resolve_game_types()
-        await self._ensure_start_player_pool()
 
-        if not self._start_player_pool:
-            raise ValueError("No players available to start a game.")
+        connection_settings = await resolve_connection_settings(
+            requested_settings=requested_settings,
+            default_relationship_types=DEFAULT_RELATIONSHIP_TYPES,
+        )
 
         for attempt in range(1, max_attempts + 1):
             attempt_start = time.perf_counter()
-            logger.info("Path game attempt %s/%s: selecting random start player", attempt, max_attempts)
+            logger.info("Path game attempt %s/%s: selecting filtered start player", attempt, max_attempts)
 
-            start_player_id = random.choice(self._start_player_pool)
+            start_player_record = await getters.get_random_player_with_filters(
+                teams=connection_settings.teams,
+                start_year=connection_settings.start_year,
+                end_year=connection_settings.end_year,
+                game_types=connection_settings.game_types,
+            )
 
-            if start_player_id is None:
-                logger.warning("Path game attempt %s: no random start player id found", attempt)
-                logger.debug(
-                    "Path game attempt %s finished in %.3fs",
-                    attempt,
-                    time.perf_counter() - attempt_start,
-                )
+            random_player = start_player_record.get("random_player") if start_player_record else None
+            if random_player is None:
+                logger.warning("Path game attempt %s: no start player found for selected filters", attempt)
                 continue
 
-            start_player_name = await getters.get_name_from_playerid(start_player_id)
-            if not start_player_name:
-                logger.warning("Path game attempt %s: random start player id=%s has no name", attempt, start_player_id)
-                logger.debug(
-                    "Path game attempt %s finished in %.3fs",
-                    attempt,
-                    time.perf_counter() - attempt_start,
-                )
-                continue
-
-            start_player = {"id": start_player_id, "full_name": start_player_name}
+            start_player = {
+                "id": int(random_player["id"]),
+                "full_name": str(random_player["fullName"]),
+            }
             logger.info("Path game attempt %s: selected start player id=%s", attempt, start_player["id"])
 
             logger.info("Path game attempt %s: finding connected end player", attempt)
             end_lookup_started = time.perf_counter()
             end_player = await getters.get_random_connected_player_for_start(
                 start_player_id=start_player["id"],
-                game_types=game_types,
+                teams=connection_settings.teams,
+                start_year=connection_settings.start_year,
+                end_year=connection_settings.end_year,
+                game_types=connection_settings.game_types,
             )
             logger.info(
                 "Path game attempt %s: end-player lookup elapsed=%.3fs",
                 attempt,
                 time.perf_counter() - end_lookup_started,
             )
-            if not end_player:
+
+            if not end_player or int(end_player["id"]) == start_player["id"]:
                 logger.warning(
-                    "Path game attempt %s: no connected end player found for start id=%s",
+                    "Path game attempt %s: no connected end player for start id=%s",
                     attempt,
                     start_player["id"],
                 )
@@ -109,7 +97,6 @@ class PathGameService:
                     time.perf_counter() - attempt_start,
                 )
                 continue
-            logger.info("Path game attempt %s: selected end player id=%s", attempt, end_player["id"])
 
             session_id = str(uuid4())
             session = PathGameSession(
@@ -117,19 +104,24 @@ class PathGameService:
                 start_player=start_player,
                 end_player=end_player,
                 current_path=[start_player],
-                relationship_types=game_types,
+                connection_settings=connection_settings,
             )
             self._sessions[session_id] = session
             logger.info(
-                "Path game created successfully session_id=%s attempts=%s elapsed=%.3fs",
+                "Path game created successfully session_id=%s attempts=%s elapsed=%.3fs settings=%s",
                 session_id,
                 attempt,
                 time.perf_counter() - start_time,
+                serialize_resolved_connection_settings(connection_settings),
             )
             return session
 
-        logger.error("Unable to generate valid path game after %s attempts (elapsed=%.3fs)", max_attempts, time.perf_counter() - start_time)
-        raise ValueError("Unable to generate a valid game session.")
+        logger.error(
+            "Unable to generate valid path game after %s attempts (elapsed=%.3fs)",
+            max_attempts,
+            time.perf_counter() - start_time,
+        )
+        raise ValueError("Unable to generate a valid game session with the selected settings.")
 
     def get_session(self, session_id: str) -> Optional[PathGameSession]:
         return self._sessions.get(session_id)
@@ -178,7 +170,10 @@ class PathGameService:
         common_team_seasons = await getters.get_common_team_seasons(
             player1_id=previous_player_id,
             player2_id=guessed_player_id,
-            game_types=session.relationship_types,
+            teams=session.connection_settings.teams,
+            start_year=session.connection_settings.start_year,
+            end_year=session.connection_settings.end_year,
+            game_types=session.connection_settings.game_types,
         )
 
         if not common_team_seasons:
@@ -219,6 +214,10 @@ class PathGameService:
         shortest_path = await getters.find_shortest_path_for_game(
             player1_id=session.start_player["id"],
             player2_id=session.end_player["id"],
+            teams=session.connection_settings.teams,
+            start_year=session.connection_settings.start_year,
+            end_year=session.connection_settings.end_year,
+            game_types=session.connection_settings.game_types,
             max_hops=6,
         )
 
@@ -228,7 +227,10 @@ class PathGameService:
                 step_links = await getters.get_common_team_seasons(
                     player1_id=shortest_path[idx]["id"],
                     player2_id=shortest_path[idx + 1]["id"],
-                    game_types=session.relationship_types,
+                    teams=session.connection_settings.teams,
+                    start_year=session.connection_settings.start_year,
+                    end_year=session.connection_settings.end_year,
+                    game_types=session.connection_settings.game_types,
                 )
                 optimal_step_teams.append(step_links)
 

@@ -1,18 +1,27 @@
 import asyncio
+import logging
 import random
 import secrets
 import string
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from backend.db import getters
+from backend.game.connection_settings import (
+    DEFAULT_RELATIONSHIP_TYPES,
+    ResolvedConnectionSettings,
+    get_connection_settings_options,
+    resolve_connection_settings,
+    serialize_resolved_connection_settings,
+)
 
 TURN_SECONDS = 20
 TEAM_SEASON_CONNECTION_CAP = 3
 LOBBY_CODE_LENGTH = 6
 MAX_PLAYERS = 2
-_DEFAULT_GAME_TYPES = ["TEAMMATE_IN_REGULAR_SEASON"]
+logger = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -41,7 +50,8 @@ class MultiplayerRound:
 class MultiplayerLobby:
     code: str
     created_at: float
-    relationship_types: List[str]
+    creator_token: str
+    connection_settings: ResolvedConnectionSettings
     players: List[MultiplayerSeat] = field(default_factory=list)
     round: Optional[MultiplayerRound] = None
 
@@ -69,31 +79,92 @@ class InvalidActionError(ValueError):
 class MultiplayerGameService:
     def __init__(self):
         self._lobbies: Dict[str, MultiplayerLobby] = {}
-        self._start_player_pool: List[int] = []
         self._lock = asyncio.Lock()
 
     def _generate_lobby_code(self) -> str:
         alphabet = string.ascii_uppercase + string.digits
         return "".join(secrets.choice(alphabet) for _ in range(LOBBY_CODE_LENGTH))
 
-    async def _ensure_start_player_pool(self, min_size: int = 200) -> None:
-        if len(self._start_player_pool) >= min_size:
-            return
-        sampled_ids = await getters.get_playerids_sample(limit=600)
-        self._start_player_pool = [int(player_id) for player_id in sampled_ids if player_id is not None]
+    async def get_settings_options(self) -> Dict[str, Any]:
+        return await get_connection_settings_options(default_relationship_types=DEFAULT_RELATIONSHIP_TYPES)
 
-    async def _pick_random_start_player(self, max_attempts: int = 20) -> Dict[str, Any]:
-        await self._ensure_start_player_pool()
-        if not self._start_player_pool:
-            raise InvalidActionError("No players are available to start a game.")
+    async def _get_lobby_default_settings(self) -> ResolvedConnectionSettings:
+        fallback = ResolvedConnectionSettings(
+            game_types=list(DEFAULT_RELATIONSHIP_TYPES),
+            teams=[],
+            start_year=1917,
+            end_year=datetime.utcnow().year,
+        )
 
-        for _ in range(max_attempts):
-            player_id = random.choice(self._start_player_pool)
-            full_name = await getters.get_name_from_playerid(player_id)
-            if full_name:
-                return {"id": player_id, "full_name": full_name}
+        try:
+            options = await asyncio.wait_for(
+                get_connection_settings_options(default_relationship_types=DEFAULT_RELATIONSHIP_TYPES),
+                timeout=3.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timed out loading multiplayer settings options during lobby creation; using fallback defaults")
+            return fallback
+        except Exception:
+            logger.exception("Failed loading multiplayer settings options during lobby creation; using fallback defaults")
+            return fallback
 
-        raise InvalidActionError("Could not choose a valid starting player.")
+        game_type_ids = [
+            entry["id"]
+            for entry in options.get("game_types", [])
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry["id"]
+        ]
+        if not game_type_ids:
+            return fallback
+
+        allowed_teams = [team for team in options.get("teams", []) if isinstance(team, str) and team.strip()]
+        defaults = options.get("defaults", {})
+
+        game_type_set = set(game_type_ids)
+        selected_game_types = [
+            game_type
+            for game_type in defaults.get("game_types", [])
+            if isinstance(game_type, str) and game_type in game_type_set
+        ]
+        if not selected_game_types:
+            selected_game_types = list(game_type_ids)
+
+        team_set = set(allowed_teams)
+        selected_teams = [
+            team
+            for team in defaults.get("teams", [])
+            if isinstance(team, str) and team in team_set
+        ]
+        if not selected_teams:
+            selected_teams = list(allowed_teams)
+
+        min_year = int(options.get("min_year", fallback.start_year))
+        max_year = int(options.get("max_year", fallback.end_year))
+        if min_year > max_year:
+            min_year, max_year = max_year, min_year
+
+        return ResolvedConnectionSettings(
+            game_types=selected_game_types,
+            teams=selected_teams,
+            start_year=min_year,
+            end_year=max_year,
+        )
+
+    async def _pick_random_start_player(self, lobby: MultiplayerLobby) -> Dict[str, Any]:
+        settings = lobby.connection_settings
+        start_player_record = await getters.get_random_player_with_filters(
+            teams=settings.teams,
+            start_year=settings.start_year,
+            end_year=settings.end_year,
+            game_types=settings.game_types,
+        )
+        random_player = start_player_record.get("random_player") if start_player_record else None
+        if random_player is None:
+            raise InvalidActionError("No players are available for the selected settings.")
+
+        return {
+            "id": int(random_player["id"]),
+            "full_name": str(random_player["fullName"]),
+        }
 
     def _find_player_by_token(self, lobby: MultiplayerLobby, player_token: Optional[str]) -> Optional[MultiplayerSeat]:
         if not player_token:
@@ -135,7 +206,7 @@ class MultiplayerGameService:
             raise InvalidActionError("A game can only start when exactly two players are in the lobby.")
 
         now = time.time()
-        start_player = await self._pick_random_start_player()
+        start_player = await self._pick_random_start_player(lobby)
         active_player = random.choice(lobby.players)
 
         new_round = MultiplayerRound(
@@ -192,11 +263,14 @@ class MultiplayerGameService:
             ],
             "you_name": you.name if you else None,
             "is_joined": you is not None,
+            "settings": serialize_resolved_connection_settings(lobby.connection_settings),
             "current_path": current_round.current_path if current_round else [],
             "step_teams": current_round.step_teams if current_round else [],
             "team_usage": current_round.team_usage if current_round else {},
             "active_player_name": active_player_name,
-            "is_your_turn": bool(current_round and you and current_round.active_player_token == you.token and not current_round.game_over),
+            "is_your_turn": bool(
+                current_round and you and current_round.active_player_token == you.token and not current_round.game_over
+            ),
             "turn_deadline_epoch_ms": turn_deadline_epoch_ms,
             "active_turn_remaining_ms": active_turn_remaining_ms,
             "game_over": bool(current_round and current_round.game_over),
@@ -210,13 +284,16 @@ class MultiplayerGameService:
             code = self._generate_lobby_code()
             while code in self._lobbies:
                 code = self._generate_lobby_code()
+            creator_token = secrets.token_urlsafe(24)
+            default_settings = await self._get_lobby_default_settings()
 
             self._lobbies[code] = MultiplayerLobby(
                 code=code,
                 created_at=time.time(),
-                relationship_types=list(_DEFAULT_GAME_TYPES),
+                creator_token=creator_token,
+                connection_settings=default_settings,
             )
-            return {"code": code, "join_path": f"/multiplayer/{code}"}
+            return {"code": code, "join_path": f"/multiplayer/{code}", "creator_token": creator_token}
 
     def get_state(self, code: str, player_token: Optional[str]) -> Dict[str, Any]:
         lobby = self._lobbies.get(code.upper())
@@ -266,6 +343,33 @@ class MultiplayerGameService:
                 "player_name": requested_name,
                 "state": self._serialize_state(lobby, player_token=new_token),
             }
+
+    async def update_settings(
+        self,
+        code: str,
+        player_token: str,
+        creator_token: str,
+        settings: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_code = code.upper().strip()
+        async with self._lock:
+            lobby = self._lobbies.get(normalized_code)
+            if not lobby:
+                raise LobbyNotFoundError("Lobby not found.")
+
+            seat = self._find_player_by_token(lobby, player_token)
+            if not seat:
+                raise InvalidTokenError("Player token is not valid for this lobby.")
+            if creator_token != lobby.creator_token:
+                raise InvalidActionError("Only the lobby creator can update settings.")
+
+            lobby.connection_settings = await resolve_connection_settings(
+                requested_settings=settings,
+                default_relationship_types=DEFAULT_RELATIONSHIP_TYPES,
+            )
+            if len(lobby.players) == MAX_PLAYERS and lobby.round is None:
+                await self._start_round(lobby)
+            return self._serialize_state(lobby, player_token=player_token)
 
     async def make_guess(self, code: str, player_token: str, guessed_player_id: int) -> Dict[str, Any]:
         normalized_code = code.upper().strip()
@@ -325,11 +429,15 @@ class MultiplayerGameService:
                     "state": self._serialize_state(lobby, player_token=player_token),
                 }
 
+            settings = lobby.connection_settings
             previous_player_id = int(current_round.current_path[-1]["id"])
             common_team_seasons = await getters.get_common_team_seasons(
                 player1_id=previous_player_id,
                 player2_id=int(guessed_player_id),
-                game_types=lobby.relationship_types,
+                teams=settings.teams,
+                start_year=settings.start_year,
+                end_year=settings.end_year,
+                game_types=settings.game_types,
             )
 
             if not common_team_seasons:

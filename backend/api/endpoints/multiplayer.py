@@ -20,6 +20,12 @@ async def create_multiplayer_lobby():
     return await multiplayer_game_service.create_lobby()
 
 
+@router.get("/settings", response_model=schemas.ConnectionSettingsOptionsResponse)
+async def get_multiplayer_settings():
+    options = await multiplayer_game_service.get_settings_options()
+    return {"options": options}
+
+
 @router.get("/lobbies/{code}", response_model=schemas.MultiplayerStateResponse)
 async def get_multiplayer_lobby_state(
     code: str,
@@ -30,6 +36,24 @@ async def get_multiplayer_lobby_state(
         return {"state": state}
     except LobbyNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/lobbies/{code}/settings", response_model=schemas.MultiplayerStateResponse)
+async def update_multiplayer_settings(code: str, payload: schemas.MultiplayerUpdateSettingsRequest):
+    try:
+        state = await multiplayer_game_service.update_settings(
+            code=code,
+            player_token=payload.player_token,
+            creator_token=payload.creator_token,
+            settings=payload.settings.model_dump(),
+        )
+        return {"state": state}
+    except LobbyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except InvalidActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/lobbies/{code}/join", response_model=schemas.MultiplayerJoinResponse)

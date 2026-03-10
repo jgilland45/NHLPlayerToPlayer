@@ -1,13 +1,43 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Literal, Optional
 
+
 class PlayerBase(BaseModel):
     id: int
     full_name: str
 
+
 class Player(PlayerBase):
     class Config:
-        orm_mode = True # Allows Pydantic to read data from ORM models
+        orm_mode = True  # Allows Pydantic to read data from ORM models
+
+
+class ConnectionSettings(BaseModel):
+    game_types: List[str] = Field(default_factory=list)
+    teams: List[str] = Field(default_factory=list)
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+
+
+class ConnectionGameTypeOption(BaseModel):
+    id: str
+    label: str
+
+
+class ConnectionSettingsOptions(BaseModel):
+    game_types: List[ConnectionGameTypeOption] = Field(default_factory=list)
+    teams: List[str] = Field(default_factory=list)
+    min_year: int
+    max_year: int
+    defaults: ConnectionSettings
+
+
+class ConnectionSettingsOptionsResponse(BaseModel):
+    options: ConnectionSettingsOptions
+
+
+class PathGameStartRequest(BaseModel):
+    settings: Optional[ConnectionSettings] = None
 
 
 class PathGameStartResponse(BaseModel):
@@ -16,6 +46,7 @@ class PathGameStartResponse(BaseModel):
     end_player: Player
     current_path: List[Player]
     completed: bool
+    settings: ConnectionSettings
 
 
 class PathGameGuessRequest(BaseModel):
@@ -40,6 +71,7 @@ class PathGameOptimalResponse(BaseModel):
 class MultiplayerCreateLobbyResponse(BaseModel):
     code: str
     join_path: str
+    creator_token: str
 
 
 class MultiplayerLobbyPlayer(BaseModel):
@@ -56,6 +88,7 @@ class MultiplayerLobbyState(BaseModel):
     players: List[MultiplayerLobbyPlayer]
     you_name: Optional[str] = None
     is_joined: bool = False
+    settings: ConnectionSettings
     current_path: List[Player] = Field(default_factory=list)
     step_teams: List[List[str]] = Field(default_factory=list)
     team_usage: Dict[str, int] = Field(default_factory=dict)
@@ -96,6 +129,12 @@ class MultiplayerGuessResponse(BaseModel):
 
 class MultiplayerPlayAgainRequest(BaseModel):
     player_token: str = Field(min_length=1)
+
+
+class MultiplayerUpdateSettingsRequest(BaseModel):
+    player_token: str = Field(min_length=1)
+    creator_token: str = Field(min_length=1)
+    settings: ConnectionSettings
 
 
 class MultiplayerStateResponse(BaseModel):

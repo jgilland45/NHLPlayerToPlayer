@@ -1,24 +1,33 @@
 import logging
 import time
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
 from backend import schemas
+from backend.game.connection_settings import serialize_resolved_connection_settings
 from backend.game.path_game import path_game_service
 
 router = APIRouter(prefix="/game/path", tags=["path-game"])
 logger = logging.getLogger("uvicorn.error")
 
 
+@router.get("/settings", response_model=schemas.ConnectionSettingsOptionsResponse)
+async def get_path_game_settings():
+    options = await path_game_service.get_settings_options()
+    return {"options": options}
+
+
 @router.post("/start", response_model=schemas.PathGameStartResponse)
-async def start_path_game():
+async def start_path_game(payload: Optional[schemas.PathGameStartRequest] = None):
     request_start = time.perf_counter()
     logger.info("POST /game/path/start received")
     try:
-        session = await path_game_service.start_game()
+        requested_settings = payload.settings.model_dump() if payload and payload.settings else None
+        session = await path_game_service.start_game(requested_settings=requested_settings)
     except ValueError as exc:
         logger.exception("POST /game/path/start failed: %s", str(exc))
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     logger.info(
         "POST /game/path/start completed session_id=%s elapsed=%.3fs",
@@ -32,6 +41,7 @@ async def start_path_game():
         "end_player": session.end_player,
         "current_path": session.current_path,
         "completed": session.completed,
+        "settings": serialize_resolved_connection_settings(session.connection_settings),
     }
 
 
@@ -53,8 +63,14 @@ async def make_path_game_guess(payload: schemas.PathGameGuessRequest):
 @router.get("/{session_id}/optimal", response_model=schemas.PathGameOptimalResponse)
 async def get_optimal_path_solution(session_id: str):
     logger.info("GET /game/path/%s/optimal", session_id)
-    result = await path_game_service.get_optimal_solution(session_id)
-    if not result:
-        logger.warning("GET /game/path/%s/optimal session not found", session_id)
-        raise HTTPException(status_code=404, detail="Session not found")
-    return result
+    try:
+        result = await path_game_service.get_optimal_solution(session_id)
+        if not result:
+            logger.warning("GET /game/path/%s/optimal session not found", session_id)
+            raise HTTPException(status_code=404, detail="Session not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("GET /game/path/%s/optimal failed: %s", session_id, str(exc))
+        raise HTTPException(status_code=500, detail="Failed to compute optimal solution.") from exc

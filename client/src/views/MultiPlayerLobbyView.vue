@@ -54,6 +54,40 @@
       </p>
     </section>
 
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Game Settings</h2>
+        <button
+          class="action-btn secondary"
+          :disabled="!canEditSettings || settingsLoading || savingSettings"
+          @click="openSettingsModal"
+        >
+          {{ settingsLoading ? 'Loading...' : 'Edit Settings' }}
+        </button>
+      </div>
+      <p class="subtitle">
+        Game types: {{ state?.settings.game_types.length ?? 0 }} selected
+      </p>
+      <p class="subtitle">
+        Teams: {{ state && state.settings.teams.length === 0 ? 'All teams' : `${state?.settings.teams.length ?? 0} selected` }}
+      </p>
+      <p class="subtitle">
+        Season range: {{ state?.settings.start_year ?? '-' }} to {{ state?.settings.end_year ?? '-' }}
+      </p>
+      <p
+        v-if="!state?.is_joined"
+        class="subtitle"
+      >
+        Join the lobby to edit settings.
+      </p>
+      <p
+        v-else-if="!canEditSettings"
+        class="subtitle"
+      >
+        Only the lobby creator can edit settings.
+      </p>
+    </section>
+
     <section
       v-if="!state?.is_joined"
       class="panel"
@@ -207,6 +241,16 @@
     >
       {{ errorBanner }}
     </p>
+
+    <GameSettingsModal
+      :open="settingsOpen"
+      :options="settingsOptions"
+      :initial-settings="modalInitialSettings"
+      :saving="savingSettings"
+      title="Multiplayer Settings"
+      @close="settingsOpen = false"
+      @save="saveLobbySettings"
+    />
   </main>
 </template>
 
@@ -214,10 +258,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 
+import GameSettingsModal from '@/components/GameSettingsModal.vue';
 import NoLinkToPlayer from '@/components/NoLinkToPlayer.vue';
 import PlayerCard from '@/components/PlayerCard.vue';
 import SearchWithResults, { type Player as SearchPlayer } from '@/components/SearchWithResults.vue';
 import TeamConnectionBundle, { type TeamConnection } from '@/components/TeamConnectionBundle.vue';
+import type {
+  ConnectionSettings,
+  ConnectionSettingsOptions,
+  ConnectionSettingsOptionsResponse,
+} from '@/types/gameSettings';
 
 type ApiPlayer = {
   id: number;
@@ -238,6 +288,7 @@ type LobbyState = {
   players: LobbyPlayer[];
   you_name: string | null;
   is_joined: boolean;
+  settings: ConnectionSettings;
   current_path: ApiPlayer[];
   step_teams: string[][];
   team_usage: Record<string, number>;
@@ -265,9 +316,11 @@ type TeamMeta = {
 const route = useRoute();
 const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://127.0.0.1:8000';
 const REQUEST_TIMEOUT_MS = 15000;
+const SETTINGS_REQUEST_TIMEOUT_MS = 60000;
 
 const state = ref<LobbyState | null>(null);
 const playerToken = ref<string | null>(null);
+const creatorToken = ref<string | null>(null);
 const joinName = ref('');
 const showJoinForm = ref(false);
 const joining = ref(false);
@@ -279,6 +332,11 @@ const pathConnections = ref<TeamConnection[][]>([]);
 const noLinkPopups = ref<PopupEntry[]>([]);
 const popupCounter = ref(0);
 const pathScrollRef = ref<HTMLElement | null>(null);
+const settingsOptions = ref<ConnectionSettingsOptions | null>(null);
+const settingsLoading = ref(false);
+const settingsOpen = ref(false);
+const savingSettings = ref(false);
+const modalInitialSettings = ref<ConnectionSettings | null>(null);
 
 const teamMetaCache = new Map<string, Promise<TeamMeta>>();
 let pollIntervalId: number | null = null;
@@ -289,14 +347,27 @@ const lobbyCode = computed(() => String(route.params.code ?? '').trim().toUpperC
 const lobbyUrl = computed(() => `${window.location.origin}/multiplayer/${lobbyCode.value}`);
 const tokenStorageKey = computed(() => `nhl-player-to-player-token-${lobbyCode.value}`);
 const nameStorageKey = computed(() => `nhl-player-to-player-name-${lobbyCode.value}`);
+const creatorTokenStorageKey = computed(() => `nhl-player-to-player-creator-token-${lobbyCode.value}`);
 const orderedPlayers = computed(() => state.value?.players ?? []);
 const activeTimerSeconds = computed(() => Math.ceil(countdownMs.value / 1000));
+const canEditSettings = computed(() => Boolean(state.value?.is_joined && creatorToken.value));
 
 const getPlayerImage = (playerId: number) => `https://assets.nhle.com/mugs/nhl/latest/${playerId}.png`;
 
-const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+const cloneSettings = (settings: ConnectionSettings): ConnectionSettings => ({
+  game_types: [...settings.game_types],
+  teams: [...settings.teams],
+  start_year: Number(settings.start_year),
+  end_year: Number(settings.end_year),
+});
+
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, {
       ...init,
@@ -319,12 +390,95 @@ const readErrorMessage = async (response: Response): Promise<string> => {
   return `Request failed (${response.status}).`;
 };
 
+const loadSettingsOptions = async () => {
+  if (settingsLoading.value) {
+    return;
+  }
+  settingsLoading.value = true;
+  try {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/game/multiplayer/settings`, {}, SETTINGS_REQUEST_TIMEOUT_MS);
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = (await response.json()) as ConnectionSettingsOptionsResponse;
+    settingsOptions.value = data.options;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Loading game settings timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    settingsLoading.value = false;
+  }
+};
+
+const openSettingsModal = async () => {
+  if (!canEditSettings.value) {
+    errorBanner.value = 'Only the lobby creator can edit game settings.';
+    return;
+  }
+  errorBanner.value = null;
+  try {
+    if (!settingsOptions.value) {
+      await loadSettingsOptions();
+    }
+    modalInitialSettings.value = state.value?.settings ? cloneSettings(state.value.settings) : null;
+    settingsOpen.value = true;
+  } catch (error) {
+    errorBanner.value = error instanceof Error ? error.message : 'Could not load settings.';
+  }
+};
+
+const saveLobbySettings = async (nextSettings: ConnectionSettings) => {
+  if (!playerToken.value) {
+    errorBanner.value = 'Join the lobby before changing settings.';
+    return;
+  }
+  if (!creatorToken.value) {
+    errorBanner.value = 'Only the lobby creator can change settings.';
+    return;
+  }
+
+  savingSettings.value = true;
+  errorBanner.value = null;
+  try {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/game/multiplayer/lobbies/${lobbyCode.value}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        player_token: playerToken.value,
+        creator_token: creatorToken.value,
+        settings: cloneSettings(nextSettings),
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = await response.json();
+    settingsOpen.value = false;
+    statusMessage.value = 'Game settings updated.';
+    await updateStateFromResponse(data.state as LobbyState);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      errorBanner.value = 'Settings update request timed out.';
+    } else {
+      errorBanner.value = error instanceof Error ? error.message : 'Could not update settings.';
+    }
+  } finally {
+    savingSettings.value = false;
+  }
+};
+
 const loadStoredIdentity = () => {
   playerToken.value = localStorage.getItem(tokenStorageKey.value);
   const storedName = localStorage.getItem(nameStorageKey.value);
   if (storedName) {
     joinName.value = storedName;
   }
+};
+
+const loadStoredCreatorToken = () => {
+  creatorToken.value = localStorage.getItem(creatorTokenStorageKey.value);
 };
 
 const persistIdentity = (token: string, playerName: string) => {
@@ -480,7 +634,6 @@ const updateStateFromResponse = async (nextState: LobbyState) => {
 };
 
 const refreshState = async () => {
-  errorBanner.value = null;
   try {
     const params = new URLSearchParams();
     if (playerToken.value) {
@@ -668,10 +821,19 @@ const initializeLobbyPage = async () => {
   state.value = null;
   pathConnections.value = [];
   noLinkPopups.value = [];
+  settingsOpen.value = false;
   showJoinForm.value = false;
   errorBanner.value = null;
   statusMessage.value = 'Press "Join game" to join this lobby.';
   loadStoredIdentity();
+  loadStoredCreatorToken();
+  if (!settingsOptions.value) {
+    try {
+      await loadSettingsOptions();
+    } catch (error) {
+      errorBanner.value = error instanceof Error ? error.message : 'Could not load settings options.';
+    }
+  }
   await refreshState();
   if (playerToken.value && joinName.value.trim()) {
     await attemptAutoJoin();
@@ -731,6 +893,10 @@ onBeforeUnmount(() => {
 
   .panel {
     @apply rounded bg-slate-800 p-4;
+
+    .panel-head {
+      @apply mb-2 flex items-center justify-between gap-2;
+    }
 
     h2 {
       @apply mb-2 text-lg font-semibold;

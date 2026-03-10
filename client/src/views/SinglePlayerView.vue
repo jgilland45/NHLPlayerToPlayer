@@ -14,6 +14,14 @@
 
     <div class="controls">
       <button
+        class="action-btn secondary"
+        :disabled="loading || settingsLoading"
+        @click="openSettingsModal"
+      >
+        {{ settingsLoading ? 'Loading Settings...' : 'Game Settings' }}
+      </button>
+
+      <button
         class="action-btn"
         :disabled="loading"
         @click="startGame"
@@ -157,17 +165,33 @@
         </div>
       </div>
     </section>
+
+    <GameSettingsModal
+      :open="settingsOpen"
+      :options="settingsOptions"
+      :initial-settings="modalInitialSettings"
+      :saving="loading"
+      title="Single-Player Settings"
+      @close="settingsOpen = false"
+      @save="applySettings"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
+import GameSettingsModal from '@/components/GameSettingsModal.vue';
 import NoLinkToPlayer from '@/components/NoLinkToPlayer.vue';
 import PlayerCard from '@/components/PlayerCard.vue';
 import SearchWithResults, { type Player as SearchPlayer } from '@/components/SearchWithResults.vue';
 import TeamConnectionBundle, { type TeamConnection } from '@/components/TeamConnectionBundle.vue';
+import type {
+  ConnectionSettings,
+  ConnectionSettingsOptions,
+  ConnectionSettingsOptionsResponse,
+} from '@/types/gameSettings';
 
 type ApiPlayer = {
   id: number;
@@ -181,6 +205,8 @@ type PopupEntry = {
 
 const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://127.0.0.1:8000';
 const REQUEST_TIMEOUT_MS = 15000;
+const SETTINGS_REQUEST_TIMEOUT_MS = 60000;
+const START_GAME_REQUEST_TIMEOUT_MS = 90000;
 
 const loading = ref(false);
 const sessionId = ref<string | null>(null);
@@ -199,6 +225,64 @@ const noLinkPopups = ref<PopupEntry[]>([]);
 const popupCounter = ref(0);
 const yourPathScrollRef = ref<HTMLElement | null>(null);
 const teamInfoCache = new Map<string, Promise<TeamConnection>>();
+const settingsOpen = ref(false);
+const settingsLoading = ref(false);
+const settingsOptions = ref<ConnectionSettingsOptions | null>(null);
+const activeSettings = ref<ConnectionSettings | null>(null);
+const modalInitialSettings = ref<ConnectionSettings | null>(null);
+
+const cloneSettings = (settings: ConnectionSettings): ConnectionSettings => ({
+  game_types: [...settings.game_types],
+  teams: [...settings.teams],
+  start_year: Number(settings.start_year),
+  end_year: Number(settings.end_year),
+});
+
+const loadSettings = async () => {
+  if (settingsLoading.value) {
+    return;
+  }
+  settingsLoading.value = true;
+  try {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/game/path/settings`, {}, SETTINGS_REQUEST_TIMEOUT_MS);
+    if (!response.ok) {
+      throw new Error('Failed to load settings options');
+    }
+    const data = (await response.json()) as ConnectionSettingsOptionsResponse;
+    settingsOptions.value = data.options;
+    if (!activeSettings.value) {
+      activeSettings.value = cloneSettings(data.options.defaults);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Loading game settings timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    settingsLoading.value = false;
+  }
+};
+
+const applySettings = (nextSettings: ConnectionSettings) => {
+  activeSettings.value = cloneSettings(nextSettings);
+  settingsOpen.value = false;
+  statusMessage.value = sessionId.value
+    ? 'Settings saved. Start a new game to apply them.'
+    : 'Settings saved.';
+};
+
+const openSettingsModal = async () => {
+  errorBanner.value = null;
+  try {
+    if (!settingsOptions.value) {
+      await loadSettings();
+    }
+    modalInitialSettings.value = activeSettings.value ? cloneSettings(activeSettings.value) : null;
+    settingsOpen.value = true;
+  } catch (error) {
+    errorBanner.value = error instanceof Error ? error.message : 'Could not load settings.';
+  }
+};
 
 const getPlayerImage = (playerId: number) => `https://assets.nhle.com/mugs/nhl/latest/${playerId}.png`;
 
@@ -261,9 +345,13 @@ const getTeamInfoFromCommonTeams = async (teams: string[]): Promise<TeamConnecti
   return Promise.all(lookups);
 };
 
-const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+const fetchWithTimeout = async (
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, {
       ...init,
@@ -289,9 +377,24 @@ const startGame = async () => {
   statusMessage.value = 'Starting a new game...';
 
   try {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/game/path/start`, {
-      method: 'POST',
-    });
+    if (!settingsOptions.value) {
+      await loadSettings();
+    }
+    if (!activeSettings.value) {
+      throw new Error('Settings are not available');
+    }
+
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/game/path/start`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: activeSettings.value,
+        }),
+      },
+      START_GAME_REQUEST_TIMEOUT_MS,
+    );
     if (!response.ok) {
       throw new Error('Failed to start game');
     }
@@ -307,6 +410,9 @@ const startGame = async () => {
     optimalPath.value = [];
     optimalConnections.value = [];
     shortestPathLength.value = 0;
+    if (data.settings) {
+      activeSettings.value = cloneSettings(data.settings as ConnectionSettings);
+    }
     statusMessage.value = 'Game started. Pick a teammate connected to your current path end.';
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -425,6 +531,12 @@ const showOptimalSolution = async () => {
     loading.value = false;
   }
 };
+
+onMounted(() => {
+  void loadSettings().catch(() => {
+    // Leave settings unavailable until the user retries.
+  });
+});
 </script>
 
 <style lang="postcss" scoped>
