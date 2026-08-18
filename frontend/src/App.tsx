@@ -4,30 +4,36 @@ import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import './App.css'
 
+import type { Player } from './models/players.ts'
+
 function App() {
-  const [count, setCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const sendCountToBackend = async () => {
+  const [playerName, setPlayerName] = useState('');
+  const [players, setPlayers] = useState<Array<Player>>([]);
+
+  const searchPlayers = async (name: string) => {
+    setPlayerName(name);
     setIsLoading(true);
     setError('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/data', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
+      const response = await fetch('http://localhost:3000/api/searchPlayers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ count })
+        body: JSON.stringify({ playerName: name })
       });
 
       if (!response.ok) {
-        throw new Error('The backend could not process the count.');
+        throw new Error('The backend could not process the player search.');
       }
 
-      const data: { newCount: number } = await response.json();
-      setCount(data.newCount);
+      const data: Array<Player> = await response.json();
+      console.log('Players found:', data);
+      setPlayers(data);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Something went wrong.');
     } finally {
@@ -49,102 +55,21 @@ function App() {
             Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
           </p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={sendCountToBackend}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Sending...' : `Count is ${count}`}
-        </button>
+        <input
+          type="text"
+          value={playerName}
+          onChange={(e) => searchPlayers(e.target.value)}
+          placeholder="Enter player name"
+          aria-disabled={isLoading ? 'true' : 'false'}
+        />
+
+        <ul>
+          {players.map((player) => (
+            <li key={player.playerId}>{player.playerId}: {player.name}</li>
+          ))}
+        </ul>
         {error && <p role="alert">{error}</p>}
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
     </>
   )
 }

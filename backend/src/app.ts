@@ -1,6 +1,9 @@
 import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 
+import { searchNHLPlayersByName } from './apiCalls/nhlSearch.ts';
+import type { PlayerOutput } from './models/players.ts';
+
 const app: Express = express();
 const port = process.env.PORT || 3000;
 
@@ -11,18 +14,16 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Hello World!');
 });
 
-app.post('/api/data', (req: Request, res: Response) => {
-    const { count } = req.body;
+app.post('/api/searchPlayers', async (req: Request, res: Response) => {
+    const playerName = req.body.playerName;
 
-    if (typeof count !== 'number' || !Number.isFinite(count)) {
-        res.status(400).json({ error: 'count must be a finite number' });
-        return;
+    try {
+        const outputPlayers: Array<PlayerOutput> = await searchNHLPlayersByName(playerName);
+        res.json(outputPlayers);
+    } catch (error) {
+        console.error('Error searching NHL players:', error);
+        res.status(500).json({ error: 'An error occurred while searching for players.' });
     }
-
-    const randNumChanger = Math.random() * 10;
-    const randOpertor = Math.random() < 0.5 ? -1 : 1;
-    const newCount = count + randNumChanger * randOpertor;
-    res.json({ newCount });
 });
 
 app.listen(port, () => {
