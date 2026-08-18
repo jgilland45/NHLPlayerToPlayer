@@ -5,7 +5,35 @@ import heroImg from './assets/hero.png'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [count, setCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const sendCountToBackend = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('http://localhost:3000/api/data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ count })
+      });
+
+      if (!response.ok) {
+        throw new Error('The backend could not process the count.');
+      }
+
+      const data: { newCount: number } = await response.json();
+      setCount(data.newCount);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Something went wrong.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <>
@@ -24,10 +52,12 @@ function App() {
         <button
           type="button"
           className="counter"
-          onClick={() => setCount((count) => count + 1)}
+          onClick={sendCountToBackend}
+          disabled={isLoading}
         >
-          Count is {count}
+          {isLoading ? 'Sending...' : `Count is ${count}`}
         </button>
+        {error && <p role="alert">{error}</p>}
       </section>
 
       <div className="ticks"></div>
