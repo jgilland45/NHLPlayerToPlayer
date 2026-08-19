@@ -3,7 +3,7 @@
 
 import requests
 
-import endpoints
+import statics
 import datatypes
 
 # API getters
@@ -12,7 +12,7 @@ def get_all_games() -> list[datatypes.GameShort]:
     """
     Get all games from the NHL API.
     """
-    r = requests.get(endpoints.ALL_GAMES_ENDPOINT)
+    r = requests.get(statics.ALL_GAMES_ENDPOINT)
     if r.status_code != 200:
         raise Exception(f"Failed to get all games from NHL API. Status code: {r.status_code}")
 
@@ -24,7 +24,7 @@ def get_all_players() -> list[datatypes.PlayerShort]:
     """
     Get all players from the NHL API.
     """
-    r = requests.get(endpoints.ALL_PLAYERS_ENDPOINT)
+    r = requests.get(statics.ALL_PLAYERS_ENDPOINT)
     if r.status_code != 200:
         raise Exception(f"Failed to get all players from NHL API. Status code: {r.status_code}")
 
@@ -34,7 +34,7 @@ def get_specific_game(game_id: int) -> datatypes.GameLong:
     """
     Get a specific game from the NHL API.
     """
-    r = requests.get(endpoints.SPECIFIC_GAME_ENDPOINT.format(game_id=game_id))
+    r = requests.get(statics.SPECIFIC_GAME_ENDPOINT.format(game_id=game_id))
     if r.status_code != 200:
         raise Exception(f"Failed to get specific game from NHL API. Status code: {r.status_code}")
 
@@ -44,7 +44,7 @@ def get_specific_player(player_id: int) -> datatypes.PlayerLong:
     """
     Get a specific player from the NHL API.
     """
-    r = requests.get(endpoints.SPECIFIC_PLAYER_ENDPOINT.format(player_id=player_id))
+    r = requests.get(statics.SPECIFIC_PLAYER_ENDPOINT.format(player_id=player_id))
     if r.status_code != 200:
         raise Exception(f"Failed to get specific player from NHL API. Status code: {r.status_code}")
 

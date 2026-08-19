@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, List, Any
 
+import statics
+
 @dataclass
 class GameShort:
     id: int
@@ -9,7 +11,7 @@ class GameShort:
     gameNumber: int
     gameScheduleStateId: int
     gameStateId: int
-    gameType: int
+    gameType: statics.GameType
     homeScore: int
     homeTeamId: int
     period: int
@@ -190,7 +192,7 @@ class GameOutcome:
 class GameLong:
     id: int
     season: int
-    gameType: int
+    gameType: statics.GameType
     limitedScoring: bool
     gameDate: str
     venue: Venue
@@ -307,7 +309,7 @@ class Last5Games:
     assists: int
     gameDate: str
     gameId: int
-    gameTypeId: int
+    gameTypeId: statics.GameType
     goals: int
     homeRoadFlag: str
     opponentAbbrev: str
@@ -328,7 +330,7 @@ class TeamName:
 @dataclass
 class SeasonTotals:
     assists: int
-    gameTypeId: int
+    gameTypeId: statics.GameType
     gamesPlayed: int
     goals: int
     leagueAbbrev: str
@@ -347,7 +349,7 @@ class Trophy:
 class Seasons:
     assists: int
     blockedShots: int
-    gameTypeId: int
+    gameTypeId: statics.GameType
     gamesPlayed: int
     goals: int
     hits: int
@@ -407,3 +409,11 @@ class PlayerLong:
     last5Games: Optional[List[Last5Games]] = None
     awards: Optional[List[Awards]] = None
     currentTeamRoster: Optional[List[CurrentTeamRoster]] = None
+
+@dataclass
+class GameStorage:
+    gameId: int
+    season: int
+    playerId: str
+    gameType: statics.GameType
+    teamId: Optional[int] = None
