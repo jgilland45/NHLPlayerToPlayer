@@ -51,3 +51,18 @@ def get_specific_player(player_id: int) -> datatypes.PlayerLong:
     return datatypes.PlayerLong(**r.json())
 
 # Database getters
+
+def get_all_games_from_postgres() -> list[datatypes.GameStorage]:
+    """
+    Get all games from the Postgres database.
+    """
+    # Implementation for fetching all games from the Postgres database
+    pass
+
+def get_specific_game_from_postgres(game_id: int) -> datatypes.GameStorage:
+    """
+    Get a specific game from the Postgres database.
+    This gets all playerId-gameId pairs for a specific game, which is used to get all players that played in a specific game.
+    """
+    # Implementation for fetching a specific game from the Postgres database
+    pass

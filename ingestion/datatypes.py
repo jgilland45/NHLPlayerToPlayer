@@ -417,3 +417,11 @@ class GameStorage:
     playerId: str
     gameType: statics.GameType
     teamId: Optional[int] = None
+
+@dataclass
+class TeammateRelationship:
+    player1Id: str
+    player2Id: str
+    season: int
+    gameType: statics.GameType
+    teamId: Optional[int] = None
