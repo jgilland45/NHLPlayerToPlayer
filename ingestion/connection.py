@@ -3,42 +3,49 @@ from psycopg2 import Error
 import os
 from dotenv import load_dotenv
 
-
-load_dotenv()
-
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASS = os.getenv("POSTGRES_PASS")
 
-try:
-    # 1. Connect to the PostgreSQL database
-    connection = psycopg2.connect(
-        host="localhost",          # Or your database server IP
-        database="nhlptphockeydata",
-        user=POSTGRES_USER,
-        password=POSTGRES_PASS,
-        port="5432"                # Default PostgreSQL port
-    )
+def connect_to_postgres() -> psycopg2.extensions.connection | None:
+    load_dotenv()
 
-    # 2. Create a cursor object to execute SQL commands
-    with connection.cursor() as cursor:
-        # Example: Fetching the database version
-        cursor.execute("SELECT version();")
-        db_version = cursor.fetchone()
-        print(f"Connected to PostgreSQL! Version: {db_version}\n")
+    connection = None
 
-        # # Example: Querying data from a table
-        # cursor.execute("SELECT * FROM your_table_name LIMIT 5;")
-        # records = cursor.fetchall()
-        
-        # print("Displaying rows:")
-        # for row in records:
-        #     print(row)
+    try:
+        # 1. Connect to the PostgreSQL database
+        connection = psycopg2.connect(
+            host="localhost",          # Or your database server IP
+            database="nhlptphockeydata",
+            user=POSTGRES_USER,
+            password=POSTGRES_PASS,
+            port="5432"                # Default PostgreSQL port
+        )
 
-except (Exception, Error) as error:
-    print(f"Error while connecting to PostgreSQL: {error}")
+        # 2. Create a cursor object to execute SQL commands
+        with connection.cursor() as cursor:
+            # Example: Fetching the database version
+            cursor.execute("SELECT version();")
+            db_version = cursor.fetchone()
+            print(f"Connected to PostgreSQL! Version: {db_version}\n")
 
-finally:
-    # 3. Clean up and close the connection pool
-    if 'connection' in locals() and connection:
+            # Example: Querying data from a table
+            cursor.execute("SELECT * FROM your_table_name LIMIT 5;")
+            records = cursor.fetchall()
+            
+            print("Displaying rows:")
+            for row in records:
+                print(row)
+
+    except (Exception, Error) as error:
+        print(f"Error while connecting to PostgreSQL: {error}")
+        connection = None  # Ensure connection is None if there's an error
+
+    return connection
+
+def close_postgres_connection(connection: psycopg2.extensions.connection):
+    """Closes the PostgreSQL connection."""
+    if connection:
         connection.close()
         print("\nPostgreSQL connection is closed.")
+    else:
+        print("No active PostgreSQL connection to close.")

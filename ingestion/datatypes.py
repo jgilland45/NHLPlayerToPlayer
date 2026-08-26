@@ -425,3 +425,9 @@ class TeammateRelationship:
     season: int
     gameType: statics.GameType
     teamId: Optional[int] = None
+
+@dataclass
+class DBTeams:
+    teamId: int
+    teamAbbrev: str
+    teamName: str
