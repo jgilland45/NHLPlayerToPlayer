@@ -1,10 +1,45 @@
-from dataclasses import dataclass
-from typing import Optional, List, Any
+from dataclasses import dataclass, fields, is_dataclass
+from enum import Enum
+from typing import Any, List, Optional, Union, get_args, get_origin, get_type_hints
+import types
 
 import statics
 
+
+def dataclass_from_dict(data: Any, target_type: Any) -> Any:
+    """Build a dataclass and its nested fields from decoded API data."""
+    if data is None or target_type is Any:
+        return data
+
+    origin = get_origin(target_type)
+    type_args = get_args(target_type)
+
+    if origin in (Union, types.UnionType):
+        non_none_type = next((arg for arg in type_args if arg is not type(None)), Any)
+        return dataclass_from_dict(data, non_none_type)
+    if origin is list:
+        item_type = type_args[0] if type_args else Any
+        return [dataclass_from_dict(item, item_type) for item in data]
+    if origin is dict:
+        key_type, value_type = type_args or (Any, Any)
+        return {
+            dataclass_from_dict(key, key_type): dataclass_from_dict(value, value_type)
+            for key, value in data.items()
+        }
+    if isinstance(target_type, type) and issubclass(target_type, Enum):
+        return target_type(data)
+    if isinstance(target_type, type) and is_dataclass(target_type):
+        type_hints = get_type_hints(target_type)
+        return target_type(**{
+            field.name: dataclass_from_dict(data[field.name], type_hints[field.name])
+            for field in fields(target_type)
+            if field.name in data
+        })
+
+    return data
+
 @dataclass
-class GameShort:
+class DBGame:
     id: int
     easternStartTime: str
     gameDate: str
@@ -20,7 +55,7 @@ class GameShort:
     visitingTeamId: int
 
 @dataclass
-class PlayerShort:
+class DBPlayer:
     playerId: str
     name: str
     positionCode: str
@@ -39,6 +74,21 @@ class PlayerShort:
     teamAbbrev: Optional[str] = None
     lastSeasonId: Optional[str] = None
     sweaterNumber: Optional[str] = None
+
+@dataclass
+class DBTeams:
+    teamId: int
+    teamAbbrev: str
+    teamName: str
+
+@dataclass
+class TeamAPI:
+    id: int
+    franchiseId: int
+    fullName: str
+    leagueId: int
+    rawTricode: str
+    triCode: str
 
 @dataclass
 class Venue:
@@ -73,7 +123,6 @@ class PlaceName:
 @dataclass
 class PlaceNameWithPreposition:
     default: str
-    fr: str
 
 @dataclass
 class AwayTeam:
@@ -124,11 +173,11 @@ class Forwards:
     hits: int
     powerPlayGoals: int
     sog: int
-    faceoffWinningPctg: int
     blockedShots: int
     shifts: int
-    giveaways: int
-    takeaways: int
+    giveaways: Optional[int] = None
+    takeaways: Optional[int] = None
+    faceoffWinningPctg: Optional[float] = None
     toi: Optional[str] = None
 
 @dataclass
@@ -145,11 +194,11 @@ class Defense:
     hits: int
     powerPlayGoals: int
     sog: int
-    faceoffWinningPctg: int
     blockedShots: int
     shifts: int
-    giveaways: int
-    takeaways: int
+    giveaways: Optional[int] = None
+    takeaways: Optional[int] = None
+    faceoffWinningPctg: Optional[float] = None
     toi: Optional[str] = None
 
 @dataclass
@@ -161,11 +210,11 @@ class Goalies:
     evenStrengthGoalsAgainst: int
     powerPlayGoalsAgainst: int
     shorthandedGoalsAgainst: int
-    pim: int
-    goalsAgainst: int
     toi: str
-    starter: bool
-    shotsAgainst: int
+    goalsAgainst: Optional[int] = None
+    shotsAgainst: Optional[int] = None
+    pim: Optional[int] = None
+    starter: Optional[bool] = None
     evenStrengthShotsAgainst: Optional[str] = None
     powerPlayShotsAgainst: Optional[str] = None
     shorthandedShotsAgainst: Optional[str] = None
@@ -186,7 +235,7 @@ class PlayerByGameStats:
 @dataclass
 class GameOutcome:
     lastPeriodType: str
-    otPeriods: int
+    otPeriods: Optional[int] = None
 
 @dataclass
 class GameLong:
@@ -210,11 +259,11 @@ class GameLong:
     clock: Clock
     playerByGameStats: PlayerByGameStats
     gameOutcome: GameOutcome
+    specialEvent: Optional[str] = None
 
 @dataclass
 class FullTeamName:
     default: str
-    fr: str
 
 @dataclass
 class TeamCommonName:
@@ -223,7 +272,6 @@ class TeamCommonName:
 @dataclass
 class TeamPlaceNameWithPreposition:
     default: str
-    fr: str
 
 @dataclass
 class FirstName:
@@ -343,7 +391,6 @@ class SeasonTotals:
 @dataclass
 class Trophy:
     default: str
-    fr: str
 
 @dataclass
 class Seasons:
@@ -414,20 +461,15 @@ class PlayerLong:
 class GameStorage:
     gameId: int
     season: int
-    playerId: str
+    playerId: int
     gameType: statics.GameType
     teamId: Optional[int] = None
 
 @dataclass
 class TeammateRelationship:
-    player1Id: str
-    player2Id: str
+    player1Id: int
+    player2Id: int
     season: int
     gameType: statics.GameType
     teamId: Optional[int] = None
 
-@dataclass
-class DBTeams:
-    teamId: int
-    teamAbbrev: str
-    teamName: str

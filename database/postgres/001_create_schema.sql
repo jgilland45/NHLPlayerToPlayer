@@ -8,6 +8,10 @@ WHERE NOT EXISTS (
 
 \connect nhlptphockeydata
 
+\set ON_ERROR_STOP on
+CREATE SCHEMA IF NOT EXISTS public;
+SET search_path TO public;
+
 CREATE TABLE IF NOT EXISTS teams (
     team_id integer PRIMARY KEY,
     abbreviation text,
@@ -51,6 +55,7 @@ CREATE TABLE IF NOT EXISTS games (
     visiting_score smallint,
     visiting_team_id integer REFERENCES teams(team_id),
     updated_at timestamptz NOT NULL DEFAULT now(),
+    period smallint,
     CONSTRAINT games_game_type_valid CHECK (game_type > 0)
 );
 

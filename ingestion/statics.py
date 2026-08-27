@@ -6,6 +6,7 @@ import enum
 
 ALL_GAMES_ENDPOINT = "https://api.nhle.com/stats/rest/en/game"
 ALL_PLAYERS_ENDPOINT = "https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=50000&q=*"
+ALL_TEAMS_ENDPOINT = "https://statsapi.web.nhl.com/api/v1/teams"
 
 # Specific endpoints for individual data pulls (specific game, specific player, etc.)
 SPECIFIC_GAME_ENDPOINT = "https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
