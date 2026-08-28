@@ -466,6 +466,14 @@ class GameStorage:
     teamId: Optional[int] = None
 
 @dataclass
+class OptionalGameStorage:
+    gameId: Optional[int] = None
+    season: Optional[int] = None
+    playerId: Optional[int] = None
+    gameType: Optional[statics.GameType] = None
+    teamId: Optional[int] = None
+
+@dataclass
 class TeammateRelationship:
     player1Id: int
     player2Id: int

@@ -2,11 +2,11 @@ import logging
 import asyncio
 import httpx
 
-from datatypes import DBGame, DBPlayer, DBTeams, GameLong, GameStorage, TeamAPI
-from getters import get_all_games, get_all_players, get_all_NHL_teams, get_specific_game
-from transformers import transform_game_long_to_game_storage_list, transform_game_long_to_team_api, transform_team_api_to_db_teams
-from setters import save_teams_to_postgres, save_games_to_postgres, save_players_to_postgres, save_game_players_to_postgres
-from connection import connect_to_postgres, close_postgres_connection
+from datatypes import DBGame, DBPlayer, DBTeams, GameLong, GameStorage, TeamAPI, OptionalGameStorage, TeammateRelationship
+from getters import get_all_games, get_all_players, get_all_NHL_teams, get_specific_game, get_game_storage_by_filters_from_db
+from transformers import transform_game_long_to_game_storage_list, transform_game_long_to_team_api, transform_team_api_to_db_teams, transform_game_players_to_teammate_relationships
+from setters import save_teams_to_postgres, save_games_to_postgres, save_players_to_postgres, save_game_players_to_postgres, save_teammate_relationships_to_neo4j
+from connection import connect_to_neo4j, connect_to_postgres, close_postgres_connection
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +58,35 @@ async def test_for_season_202526():
     # Save information to postgres
     connection = connect_to_postgres()
     if connection is None:
-        logger.error("Failed to connect to PostgreSQL. Exiting the test.")
-        return
-    save_teams_to_postgres(connection, teams_db)
-    save_games_to_postgres(connection, games_db_202526)
-    save_players_to_postgres(connection, players_db)
-    save_game_players_to_postgres(connection, game_storage_list)
+        raise RuntimeError("Failed to connect to PostgreSQL.")
 
-    close_postgres_connection(connection)
+    try:
+        save_teams_to_postgres(connection, teams_db)
+        save_games_to_postgres(connection, games_db_202526)
+        save_players_to_postgres(connection, players_db)
+        save_game_players_to_postgres(connection, game_storage_list)
+
+        # Get game storage from the database based on filters for the 2025-26 season.
+        filters = OptionalGameStorage(season=20252026)
+        game_storage_from_db: list[GameStorage] = get_game_storage_by_filters_from_db(connection, filters)
+
+        # Transform the game storage from the database to teammate relationships.
+        teammate_relationships: list[TeammateRelationship] = transform_game_players_to_teammate_relationships(game_storage_from_db)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        logger.exception("PostgreSQL ingestion failed; all PostgreSQL changes were rolled back.")
+        raise
+    finally:
+        close_postgres_connection(connection)
+
+    # Open neo4j database connection
+    neo4j_driver = connect_to_neo4j()
+
+    try:
+        # Save teammate relationships to neo4j.
+        save_teammate_relationships_to_neo4j(neo4j_driver, teammate_relationships)
+    finally:
+        neo4j_driver.close()
 
     return game_storage_list

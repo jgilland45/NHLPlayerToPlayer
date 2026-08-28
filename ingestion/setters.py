@@ -2,9 +2,14 @@
 # This should only include functions that are used to set data. No data transformation should be done here.
 
 import psycopg2
+from neo4j import Driver, ResultSummary
 
 import datatypes
 
+# Keep transactions bounded when importing a full season of games.
+NEO4J_RELATIONSHIP_BATCH_SIZE = 1_000
+
+# POSTGRES SETTERS
 
 def save_teams_to_postgres(connection: psycopg2.extensions.connection, teams: list[datatypes.DBTeams]):
     """
@@ -24,7 +29,6 @@ def save_teams_to_postgres(connection: psycopg2.extensions.connection, teams: li
                     team.teamAbbrev,
                 ),
             )
-    connection.commit()
 
 def save_players_to_postgres(connection: psycopg2.extensions.connection, players: list[datatypes.DBPlayer]):
     """
@@ -78,7 +82,6 @@ def save_players_to_postgres(connection: psycopg2.extensions.connection, players
                     player.sweaterNumber
                 ),
             )
-    connection.commit()
 
 def save_games_to_postgres(connection: psycopg2.extensions.connection, games: list[datatypes.DBGame]):
     """
@@ -122,7 +125,6 @@ def save_games_to_postgres(connection: psycopg2.extensions.connection, games: li
                     game.period,
                 ),
             )
-    connection.commit()
 
 
 def save_game_players_to_postgres(connection: psycopg2.extensions.connection, game_storage_list: list[datatypes.GameStorage]):
@@ -151,4 +153,37 @@ def save_game_players_to_postgres(connection: psycopg2.extensions.connection, ga
                     game_storage.teamId,
                 ),
             )
-    connection.commit()
+
+# NEO4J SETTERS
+
+def save_teammate_relationships_to_neo4j(driver: Driver, teammate_relationships: list[datatypes.TeammateRelationship]):
+    """
+    Save a list of TeammateRelationship objects into the Neo4j database.
+    """
+    query = """
+        UNWIND $relationships AS relationship
+        MERGE (a:Player {id: relationship.player1Id})
+        MERGE (b:Player {id: relationship.player2Id})
+        MERGE (a)-[r:TEAMMATE {
+            teamId: relationship.teamId,
+            season: relationship.season,
+            gameType: relationship.gameType
+        }]->(b)
+    """
+
+    summaries: list[ResultSummary] = []
+    for start in range(0, len(teammate_relationships), NEO4J_RELATIONSHIP_BATCH_SIZE):
+        batch = teammate_relationships[start:start + NEO4J_RELATIONSHIP_BATCH_SIZE]
+        summary = driver.execute_query(query, {"relationships": [
+            {
+                **relationship.__dict__,
+                "gameType": relationship.gameType.value,
+            }
+            for relationship in batch
+        ]}).summary
+        summaries.append(summary)
+
+    print(f"""
+        Saved {len(teammate_relationships)} teammate relationships to Neo4j.
+        Completed {len(summaries)} transaction(s).
+    """)

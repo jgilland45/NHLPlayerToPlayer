@@ -62,24 +62,25 @@ def transform_game_long_to_game_storage_list(game: datatypes.GameLong) -> list[d
 def transform_game_players_to_teammate_relationships(game: list[datatypes.GameStorage]) -> list[datatypes.TeammateRelationship]:
     """
     Transform a list of GameStorage objects to a list of TeammateRelationship objects.
-    Assumptions:
-    - All players in the list are from the same game.
     - Players are teammates if they are on the same team in the same game.
-    - This list of GameStorage objects will be players from one of two teams in the game.
     """
     relationships: list[datatypes.TeammateRelationship] = []
+    players_by_game: dict[int, list[datatypes.GameStorage]] = {}
+    for player in game:
+        players_by_game.setdefault(player.gameId, []).append(player)
 
-    # Iterate through each player in the list and create a relationship with every other player on the same team
-    for i in range(len(game)):
-        for j in range(i + 1, len(game)):
-            if game[i].teamId == game[j].teamId:
-                relationships.append(datatypes.TeammateRelationship(
-                    player1Id=game[i].playerId,
-                    player2Id=game[j].playerId,
-                    teamId=game[i].teamId,
-                    season=game[i].season,
-                    gameType=game[i].gameType
-                ))
+    for game_players in players_by_game.values():
+        # Pair players only within the same game and team.
+        for i in range(len(game_players)):
+            for j in range(i + 1, len(game_players)):
+                if game_players[i].teamId == game_players[j].teamId:
+                    relationships.append(datatypes.TeammateRelationship(
+                        player1Id=game_players[i].playerId,
+                        player2Id=game_players[j].playerId,
+                        teamId=game_players[i].teamId,
+                        season=game_players[i].season,
+                        gameType=game_players[i].gameType
+                    ))
 
     return relationships
 

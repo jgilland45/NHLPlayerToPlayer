@@ -3,8 +3,9 @@
 
 import logging
 from typing import Optional
-
 import httpx
+import psycopg2
+
 import statics
 import datatypes
 
@@ -80,17 +81,61 @@ async def get_all_NHL_teams(client: httpx.AsyncClient) -> list[datatypes.TeamAPI
 
 # Database getters
 
-def get_all_games_from_postgres() -> list[datatypes.GameStorage]:
+def get_game_storage_by_filters_from_db(
+        connection: psycopg2.extensions.connection,
+        filters: datatypes.OptionalGameStorage
+    ) -> list[datatypes.GameStorage]:
     """
-    Get all games from the Postgres database.
+    Get game storage from the database based on filters.
     """
-    # Implementation for fetching all games from the Postgres database
-    pass
+    conditions: list[str] = []
 
-def get_specific_game_from_postgres(game_id: int) -> datatypes.GameStorage:
+    if filters.season is not None:
+        conditions.append("season = %s")
+    if filters.gameId is not None:
+        conditions.append("game_id = %s")
+    if filters.playerId is not None:
+        conditions.append("player_id = %s")
+    if filters.teamId is not None:
+        conditions.append("team_id = %s")
+    if filters.gameType is not None:
+        conditions.append("game_type = %s")
+
+    parameters = [
+        value
+        for value in (
+            filters.season,
+            filters.gameId,
+            filters.playerId,
+            filters.teamId,
+            getattr(filters.gameType, "value", filters.gameType),
+        )
+        if value is not None
+    ]
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    query = f"""
+        SELECT game_id, season, player_id, team_id, game_type
+        FROM game_players
+        {where_clause};
     """
-    Get a specific game from the Postgres database.
-    This gets all playerId-gameId pairs for a specific game, which is used to get all players that played in a specific game.
-    """
-    # Implementation for fetching a specific game from the Postgres database
-    pass
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, parameters)
+        rows = cursor.fetchall()
+
+    game_storage_list: list[datatypes.GameStorage] = []
+    for row in rows:
+        game_storage_list.append(datatypes.GameStorage(
+            gameId=row[0],
+            season=row[1],
+            playerId=row[2],
+            teamId=row[3],
+            gameType=statics.GameType(row[4])
+        ))
+    logger.info(
+        "Fetched %d game storage records from database with filters: %s",
+        len(game_storage_list),
+        filters
+    )
+    return game_storage_list
