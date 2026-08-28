@@ -71,12 +71,12 @@ async def get_specific_player(client: httpx.AsyncClient, player_id: int) -> data
     response = await _get(client, endpoint)
     return datatypes.PlayerLong(**response.json())
 
-async def get_all_teams(client: httpx.AsyncClient) -> list[datatypes.TeamAPI]:
+async def get_all_NHL_teams(client: httpx.AsyncClient) -> list[datatypes.TeamAPI]:
     """
     Get all teams from the NHL API.
     """
-    response = await _get(client, statics.ALL_TEAMS_ENDPOINT)
-    return [datatypes.TeamAPI(**team) for team in response.json()["teams"]]
+    response = await _get(client, statics.ALL_NHL_TEAMS_ENDPOINT)
+    return [datatypes.TeamAPI(**team) for team in response.json()["data"]]
 
 # Database getters
 

@@ -84,11 +84,11 @@ class DBTeams:
 @dataclass
 class TeamAPI:
     id: int
-    franchiseId: int
     fullName: str
     leagueId: int
     rawTricode: str
     triCode: str
+    franchiseId: Optional[int] = None
 
 @dataclass
 class Venue:

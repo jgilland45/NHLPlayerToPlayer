@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS games (
     home_team_id integer REFERENCES teams(team_id),
     visiting_score smallint,
     visiting_team_id integer REFERENCES teams(team_id),
-    updated_at timestamptz NOT NULL DEFAULT now(),
     period smallint,
+    updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT games_game_type_valid CHECK (game_type > 0)
 );
 

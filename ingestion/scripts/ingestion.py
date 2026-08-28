@@ -17,7 +17,7 @@ async def main(debug: bool = False):
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     game_storage_list = await test_for_season_202526()
-    print(f"Test for 2025-26 season completed. Number of GameStorage objects: {len(game_storage_list)}")
+    print(f"Test for 2025-26 season completed. Number of GameStorage objects: {len(game_storage_list or [])}")
 
 
 if __name__ == "__main__":

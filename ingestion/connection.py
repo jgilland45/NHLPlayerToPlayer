@@ -3,11 +3,10 @@ from psycopg2 import Error
 import os
 from dotenv import load_dotenv
 
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASS = os.getenv("POSTGRES_PASS")
-
 def connect_to_postgres() -> psycopg2.extensions.connection | None:
     load_dotenv()
+    POSTGRES_USER = os.getenv("POSTGRES_USER")
+    POSTGRES_PASS = os.getenv("POSTGRES_PASS")
 
     connection = None
 
@@ -21,20 +20,20 @@ def connect_to_postgres() -> psycopg2.extensions.connection | None:
             port="5432"                # Default PostgreSQL port
         )
 
-        # 2. Create a cursor object to execute SQL commands
-        with connection.cursor() as cursor:
-            # Example: Fetching the database version
-            cursor.execute("SELECT version();")
-            db_version = cursor.fetchone()
-            print(f"Connected to PostgreSQL! Version: {db_version}\n")
+        # # 2. Create a cursor object to execute SQL commands
+        # with connection.cursor() as cursor:
+        #     # Example: Fetching the database version
+        #     cursor.execute("SELECT version();")
+        #     db_version = cursor.fetchone()
+        #     print(f"Connected to PostgreSQL! Version: {db_version}\n")
 
-            # Example: Querying data from a table
-            cursor.execute("SELECT * FROM your_table_name LIMIT 5;")
-            records = cursor.fetchall()
+        #     # Example: Querying data from a table
+        #     cursor.execute("SELECT * FROM your_table_name LIMIT 5;")
+        #     records = cursor.fetchall()
             
-            print("Displaying rows:")
-            for row in records:
-                print(row)
+        #     print("Displaying rows:")
+        #     for row in records:
+        #         print(row)
 
     except (Exception, Error) as error:
         print(f"Error while connecting to PostgreSQL: {error}")

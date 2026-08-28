@@ -6,7 +6,7 @@ import enum
 
 ALL_GAMES_ENDPOINT = "https://api.nhle.com/stats/rest/en/game"
 ALL_PLAYERS_ENDPOINT = "https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=50000&q=*"
-ALL_TEAMS_ENDPOINT = "https://statsapi.web.nhl.com/api/v1/teams"
+ALL_NHL_TEAMS_ENDPOINT = "https://api.nhle.com/stats/rest/en/team"
 
 # Specific endpoints for individual data pulls (specific game, specific player, etc.)
 SPECIFIC_GAME_ENDPOINT = "https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
@@ -42,6 +42,7 @@ class GameType(enum.Enum):
     CANADA_CUP = 14
     EXHIBITION_GAMES_PLAYED_OVERSEAS = 18
     FOUR_NATIONS_FACE_OFF = 19
+    FOUR_NATIONS_FINAL = 20
 
     # converts to leading-zero string for use in API calls, e.g. 1 -> "01", 2 -> "02", etc.
     def formatted(self) -> str:

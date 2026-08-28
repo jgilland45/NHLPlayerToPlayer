@@ -83,6 +83,29 @@ def transform_game_players_to_teammate_relationships(game: list[datatypes.GameSt
 
     return relationships
 
+def transform_game_long_to_team_api(game: datatypes.GameLong) -> list[datatypes.TeamAPI]:
+    """
+    Transform a GameLong object to a list of TeamAPI objects.
+    """
+    team_api_list: list[datatypes.TeamAPI] = []
+    team_api_list.append(datatypes.TeamAPI(
+        id=game.homeTeam.id,
+        fullName=game.homeTeam.commonName.default,
+        leagueId=0,
+        rawTricode=game.homeTeam.abbrev,
+        triCode=game.homeTeam.abbrev,
+        franchiseId=0
+    ))
+    team_api_list.append(datatypes.TeamAPI(
+        id=game.awayTeam.id,
+        fullName=game.awayTeam.commonName.default,
+        leagueId=0,
+        rawTricode=game.awayTeam.abbrev,
+        triCode=game.awayTeam.abbrev,
+        franchiseId=0
+    ))
+    return team_api_list
+
 def transform_team_api_to_db_teams(team: datatypes.TeamAPI) -> datatypes.DBTeams:
     """
     Transform a TeamAPI object to a DBTeams object.
