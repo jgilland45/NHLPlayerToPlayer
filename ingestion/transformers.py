@@ -74,9 +74,12 @@ def transform_game_players_to_teammate_relationships(game: list[datatypes.GameSt
         for i in range(len(game_players)):
             for j in range(i + 1, len(game_players)):
                 if game_players[i].teamId == game_players[j].teamId:
+                    # Sort player IDs to ensure consistent ordering in the relationship
+                    # This prevents duplicate relationships like (player1, player2) and (player2, player1).
+                    player1_id, player2_id = sorted((game_players[i].playerId, game_players[j].playerId))
                     relationships.append(datatypes.TeammateRelationship(
-                        player1Id=game_players[i].playerId,
-                        player2Id=game_players[j].playerId,
+                        player1Id=player1_id,
+                        player2Id=player2_id,
                         teamId=game_players[i].teamId,
                         season=game_players[i].season,
                         gameType=game_players[i].gameType
