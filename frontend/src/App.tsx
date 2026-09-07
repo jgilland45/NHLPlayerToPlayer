@@ -10,21 +10,20 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [playerName, setPlayerName] = useState('');
+  const [playerId, setPlayerId] = useState('');
   const [players, setPlayers] = useState<Array<Player>>([]);
 
-  const searchPlayers = async (name: string) => {
-    setPlayerName(name);
+  const searchTeammates = async (id: string) => {
     setIsLoading(true);
     setError('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/searchPlayers', {
+      const response = await fetch('http://localhost:3000/api/getTeammatesOfPlayer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ playerName: name })
+        body: JSON.stringify({ playerId: id })
       });
 
       if (!response.ok) {
@@ -56,12 +55,18 @@ function App() {
           </p>
         </div>
         <input
-          type="text"
-          value={playerName}
-          onChange={(e) => searchPlayers(e.target.value)}
-          placeholder="Enter player name"
+          type="number"
+          value={playerId}
+          onChange={(e) => setPlayerId(e.target.value)}
+          placeholder="Enter player id"
           aria-disabled={isLoading ? 'true' : 'false'}
         />
+        <button onClick={() => searchTeammates(playerId)} disabled={isLoading}>
+          {isLoading ? 'Searching...' : 'Search Teammates'}
+        </button>
+        <h2>Teammates of Player ID: {playerId}</h2>
+        <p>Results:</p>
+        <p>{players.length} players found.</p>
 
         <ul>
           {players.map((player) => (
